@@ -1,13 +1,13 @@
 {
   "name": "ts-stream",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "version": "0.1.0",
+  "description": "Lazy lists for TypeScript and JavaScript",
+  "main": "src/index.js",
   "scripts": {
     "build": "npx tsc --declaration",
     "test": "jest"
   },
-  "author": "",
+  "author": "Alex Manning",
   "license": "ISC",
   "devDependencies": {
     "@types/jest": "^26.0.22",

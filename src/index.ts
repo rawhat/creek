@@ -1,3 +1,9 @@
+export function of<T>(elem: T) {
+  return new Stream<T>(function* () {
+    yield elem;
+  });
+}
+
 export function fromArray<T>(elems: T[]) {
   return new Stream<T>(function* () {
     for (let elem of elems) {
@@ -41,6 +47,23 @@ export function iterate<T>(initial: T, mapper: (v: T) => T) {
         yield acc;
       }
     }
+  });
+}
+
+export function interval(n: number) {
+  let count = 0;
+  return new AsyncStream<number>(async function* () {
+    while (true) {
+      await delay(n);
+      yield count++;
+    }
+  });
+}
+
+export function timer(n: number) {
+  return new AsyncStream<number>(async function* () {
+    await delay(n);
+    yield 0;
   });
 }
 
@@ -99,6 +122,19 @@ class AsyncStream<T> {
     });
   }
 
+  drop(n: number) {
+    const self = this;
+    let count = 0;
+    return new AsyncStream<T>(async function* () {
+      for await (const elem of self) {
+        if (count++ < n) {
+          continue;
+        }
+        yield elem;
+      }
+    });
+  }
+
   takeUntil(test: (value: T) => boolean) {
     const self = this;
     return new AsyncStream<T>(async function* () {
@@ -116,9 +152,7 @@ class AsyncStream<T> {
     return new AsyncStream<T>(async function* () {
       for await (const elem of self) {
         if (Array.isArray(elem)) {
-          for (const inner of elem) {
-            yield inner;
-          }
+          yield* elem;
         } else {
           yield elem;
         }
@@ -131,6 +165,15 @@ class AsyncStream<T> {
     return new AsyncStream<R>(async function* () {
       for await (const elem of self) {
         yield mapper(elem);
+      }
+    });
+  }
+
+  flatMap<R>(mapper: (value: T) => R[]) {
+    const self = this;
+    return new AsyncStream<R>(async function* () {
+      for await (const elem of self) {
+        yield* mapper(elem);
       }
     });
   }
@@ -164,6 +207,12 @@ class AsyncStream<T> {
     return items;
   }
 
+  async forEach(func: (value: T) => Promise<void>) {
+    for await (const elem of this) {
+      await func(elem);
+    }
+  }
+
   [Symbol.asyncIterator]() {
     return this.generator();
   }
@@ -178,40 +227,12 @@ class Stream<T> {
 
   // Transformers
 
-  take(n: number) {
-    const self = this;
-    let count = 0;
-    return new Stream<T>(function* () {
-      for (const elem of self) {
-        if (count === n) {
-          return;
-        }
-        count++;
-        yield elem;
-      }
-    });
-  }
-
-  takeUntil(test: (value: T) => boolean) {
-    const self = this;
-    return new Stream<T>(function* () {
-      for (const elem of self) {
-        if (test(elem)) {
-          return;
-        }
-        yield elem;
-      }
-    });
-  }
-
   flatten() {
     const self = this;
     return new Stream<T>(function* () {
       for (const elem of self) {
         if (Array.isArray(elem)) {
-          for (const inner of elem) {
-            yield inner;
-          }
+          yield* elem;
         } else {
           yield elem;
         }
@@ -224,6 +245,15 @@ class Stream<T> {
     return new Stream<R>(function* () {
       for (const elem of self) {
         yield mapper(elem);
+      }
+    });
+  }
+
+  flatMap<R>(mapper: (value: T) => R[]) {
+    const self = this;
+    return new Stream<R>(function* () {
+      for (const elem of self) {
+        yield* mapper(elem);
       }
     });
   }
@@ -241,6 +271,45 @@ class Stream<T> {
 
   // Consumer
 
+  take(n: number) {
+    const self = this;
+    let count = 0;
+    return new Stream<T>(function* () {
+      for (const elem of self) {
+        if (count === n) {
+          return;
+        }
+        count++;
+        yield elem;
+      }
+    });
+  }
+
+  drop(n: number) {
+    const self = this;
+    let count = 0;
+    return new Stream<T>(function* () {
+      for (const elem of self) {
+        if (count++ < n) {
+          continue;
+        }
+        yield elem;
+      }
+    });
+  }
+
+  takeUntil(test: (value: T) => boolean) {
+    const self = this;
+    return new Stream<T>(function* () {
+      for (const elem of self) {
+        if (test(elem)) {
+          return;
+        }
+        yield elem;
+      }
+    });
+  }
+
   fold<R>(initial: R, folder: (value: T, accum: R) => R) {
     let acc = initial;
     for (const elem of this.generator()) {
@@ -255,6 +324,12 @@ class Stream<T> {
       items.push(elem);
     }
     return items;
+  }
+
+  forEach(func: (value: T) => void) {
+    for (const elem of this) {
+      func(elem);
+    }
   }
 
   // Lift to async
@@ -291,4 +366,12 @@ class Stream<T> {
   [Symbol.iterator]() {
     return this.generator();
   }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve();
+    }, ms);
+  });
 }
