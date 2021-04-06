@@ -1,129 +1,294 @@
-export class Stream<T> {
-  private generator: AsyncIterator<T>;
+export function fromArray<T>(elems: T[]) {
+  return new Stream<T>(function* () {
+    for (let elem of elems) {
+      yield elem;
+    }
+  });
+}
 
-  constructor(generator: AsyncIterator<T>) {
+export function from(n: number) {
+  let num = n;
+  return new Stream<number>(function* () {
+    while (true) {
+      yield num++;
+    }
+  });
+}
+
+export function unfold<T, R>(initial: R, mapper: (v: R) => [T, R] | undefined) {
+  let acc = initial;
+  return new Stream<T>(function* () {
+    while (true) {
+      const mapped = mapper(acc);
+      if (mapped === undefined) {
+        return;
+      }
+      acc = mapped[1];
+      yield mapped[0];
+    }
+  });
+}
+
+export function iterate<T>(initial: T, mapper: (v: T) => T) {
+  let acc: T;
+  return new Stream<T>(function* () {
+    while (true) {
+      if (!acc) {
+        acc = initial;
+        yield initial;
+      } else {
+        acc = mapper(acc);
+        yield acc;
+      }
+    }
+  });
+}
+
+export function unfoldAsync<T, R>(
+  initial: R,
+  mapper: (v: R) => Promise<[T, R] | undefined>
+) {
+  let acc = initial;
+  return new AsyncStream<T>(async function* () {
+    while (true) {
+      const mapped = await mapper(acc);
+      if (mapped === undefined) {
+        return;
+      }
+      acc = mapped[1];
+      yield mapped[0];
+    }
+  });
+}
+
+export function iterateAsync<T>(initial: T, mapper: (v: T) => Promise<T>) {
+  let acc: T;
+  return new AsyncStream<T>(async function* () {
+    while (true) {
+      if (!acc) {
+        acc = initial;
+        yield initial;
+      } else {
+        acc = await mapper(acc);
+        yield acc;
+      }
+    }
+  });
+}
+
+class AsyncStream<T> {
+  private generator: () => AsyncGenerator<T, void, void>;
+
+  constructor(generator: () => AsyncGenerator<T, void, void>) {
     this.generator = generator;
-  }
-
-  // Generators
-
-  static fromArray<T>(elems: T[]) {
-    let items = elems;
-    return new Stream<T>({
-      next: async () => {
-        const next = items[0];
-        items = items.slice(1);
-        if (!next) {
-          return { done: true } as IteratorResult<T>;
-        }
-        return { value: next, done: false };
-      }
-    })
-  }
-
-  static from(n: number) {
-    let num = n;
-    return new Stream<number>({
-      next: async () => {
-        return {value: num++, done: false};
-      }
-    });
-  }
-
-  static unfold<T, R>(
-    initial: R,
-    mapper: (v: R) => Promise<[T, R] | undefined>
-  ) {
-    let acc = initial;
-    return new Stream<T>({
-      next: async () => {
-        const result = await mapper(acc);
-        if (result === undefined) {
-          return {value: undefined, done: true};
-        }
-        acc = result[1];
-        return {value: result[0], done: false};
-      }
-    });
   }
 
   // Transformers
 
+  take(n: number) {
+    const self = this;
+    let count = 0;
+    return new AsyncStream<T>(async function* () {
+      for await (const elem of self) {
+        if (count === n) {
+          return;
+        }
+        count++;
+        yield elem;
+      }
+    });
+  }
+
   takeUntil(test: (value: T) => boolean) {
-    return new Stream<T>({
-      next: async () => {
-        const {value, done} = await this.generator.next();
-        if (done) {
-          return {value, done};
+    const self = this;
+    return new AsyncStream<T>(async function* () {
+      for await (const elem of self) {
+        if (test(elem)) {
+          return;
         }
-        if (test(value)) {
-          return {value, done: true};
-        }
-        return {value, done: false};
+        yield elem;
       }
     });
   }
 
   flatten() {
-    let list: T[] = [];
-    return new Stream<T>({
-      next: async () => {
-        const next = list.pop();
-        if (next) {
-          return {value: next, done: false};
+    const self = this;
+    return new AsyncStream<T>(async function* () {
+      for await (const elem of self) {
+        if (Array.isArray(elem)) {
+          for (const inner of elem) {
+            yield inner;
+          }
+        } else {
+          yield elem;
         }
-        const nextItems = await this.generator.next();
-        if (!nextItems || nextItems.done) {
-          return {done: true} as IteratorResult<T>;
-        }
-        if (Array.isArray(nextItems.value)) {
-          const [next, ...l] = nextItems.value;
-          list = l;
-          return {value: next, done: false};
-        }
-        return nextItems;
       }
     });
   }
 
   map<R>(mapper: (value: T) => R) {
-    return new Stream<R>({
-      next: async () => {
-        const {value, done} = await this.generator.next();
-        if (!value || done) {
-          return { done: true } as IteratorResult<R>;
-        }
-        return { value: mapper(value), done: false }
+    const self = this;
+    return new AsyncStream<R>(async function* () {
+      for await (const elem of self) {
+        yield mapper(elem);
       }
-    })
+    });
   }
 
   filter(filter: (value: T) => boolean) {
-    return new Stream<T>({
-      next: async () => {
-        const {value, done} = await this.generator.next();
-        if (!value || done) {
-          return { done: true } as IteratorResult<T>;
+    const self = this;
+    return new AsyncStream<T>(async function* () {
+      for await (const elem of self) {
+        if (filter(elem)) {
+          yield elem;
         }
-        if (filter(value)) {
-          return { value: value, done: false };
-        }
-        return { done: false } as IteratorResult<T>;
       }
-    })
+    });
   }
 
   // Consumer
 
+  async fold<R>(initial: R, folder: (value: T, accum: R) => Promise<R>) {
+    let acc = initial;
+    for await (const elem of this.generator()) {
+      acc = await folder(elem, acc);
+    }
+    return acc;
+  }
+
   async toArray(): Promise<T[]> {
-    let items = [];
-    for await (let elem of this) {
+    const items = [];
+    for await (const elem of this.generator()) {
       items.push(elem);
     }
     return items;
   }
 
   [Symbol.asyncIterator]() {
-    return this.generator;
+    return this.generator();
+  }
+}
+
+class Stream<T> {
+  private generator: () => Generator<T, void, void>;
+
+  constructor(generator: () => Generator<T, void, void>) {
+    this.generator = generator;
+  }
+
+  // Transformers
+
+  take(n: number) {
+    const self = this;
+    let count = 0;
+    return new Stream<T>(function* () {
+      for (const elem of self) {
+        if (count === n) {
+          return;
+        }
+        count++;
+        yield elem;
+      }
+    });
+  }
+
+  takeUntil(test: (value: T) => boolean) {
+    const self = this;
+    return new Stream<T>(function* () {
+      for (const elem of self) {
+        if (test(elem)) {
+          return;
+        }
+        yield elem;
+      }
+    });
+  }
+
+  flatten() {
+    const self = this;
+    return new Stream<T>(function* () {
+      for (const elem of self) {
+        if (Array.isArray(elem)) {
+          for (const inner of elem) {
+            yield inner;
+          }
+        } else {
+          yield elem;
+        }
+      }
+    });
+  }
+
+  map<R>(mapper: (value: T) => R) {
+    const self = this;
+    return new Stream<R>(function* () {
+      for (const elem of self) {
+        yield mapper(elem);
+      }
+    });
+  }
+
+  filter(filter: (value: T) => boolean) {
+    const self = this;
+    return new Stream<T>(function* () {
+      for (const elem of self) {
+        if (filter(elem)) {
+          yield elem;
+        }
+      }
+    });
+  }
+
+  // Consumer
+
+  fold<R>(initial: R, folder: (value: T, accum: R) => R) {
+    let acc = initial;
+    for (const elem of this.generator()) {
+      acc = folder(elem, acc);
+    }
+    return acc;
+  }
+
+  toArray(): T[] {
+    const items = [];
+    for (const elem of this.generator()) {
+      items.push(elem);
+    }
+    return items;
+  }
+
+  // Lift to async
+
+  mapAsync<R>(mapper: (value: T) => Promise<R>) {
+    const self = this;
+    return new AsyncStream<R>(async function* () {
+      for (const elem of self) {
+        yield await mapper(elem);
+      }
+    });
+  }
+
+  filterAsync(test: (value: T) => Promise<boolean>) {
+    const self = this;
+    return new AsyncStream<T>(async function* () {
+      for (const elem of self) {
+        if (await test(elem)) {
+          yield elem;
+        }
+      }
+    });
+  }
+
+  async foldAsync<R>(initial: R, folder: (value: T, accum: R) => Promise<R>) {
+    const self = this;
+    let acc = initial;
+    for (const elem of self) {
+      acc = await folder(elem, acc);
+    }
+    return acc;
+  }
+
+  [Symbol.iterator]() {
+    return this.generator();
   }
 }

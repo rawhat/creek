@@ -1,1 +1,5 @@
 /node_modules/
+/test/*.js
+/test/*.d.ts
+/src/benchmark.js
+/src/benchmark.d.ts
