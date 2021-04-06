@@ -200,7 +200,7 @@ class AsyncStream<T> {
   }
 
   async toArray(): Promise<T[]> {
-    const items = [];
+    const items: T[] = [];
     for await (const elem of this.generator()) {
       items.push(elem);
     }
@@ -319,7 +319,7 @@ class Stream<T> {
   }
 
   toArray(): T[] {
-    const items = [];
+    const items: T[] = [];
     for (const elem of this.generator()) {
       items.push(elem);
     }
