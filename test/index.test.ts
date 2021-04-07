@@ -118,4 +118,18 @@ describe("Stream", () => {
 
     expect(arr).toStrictEqual([1, 2, 3, 4, 5]);
   });
+
+  it("should unfold async and return", async () => {
+    let n = 0;
+    const arr = await stream
+      .unfoldAsync<number, string | undefined>("", async (str) => {
+        if (str === undefined) {
+          return;
+        }
+        return [n++, n > 3 ? undefined : str];
+      })
+      .toArray();
+
+    expect(arr).toStrictEqual([0, 1, 2, 3]);
+  })
 });

@@ -189,6 +189,16 @@ class AsyncStream<T> {
     });
   }
 
+  tap(effect: (value: T) => void) {
+    const self = this;
+    return new AsyncStream<T>(async function* () {
+      for await (const elem of self) {
+        effect(elem);
+        yield elem;
+      }
+    })
+  }
+
   // Consumer
 
   async fold<R>(initial: R, folder: (value: T, accum: R) => Promise<R>) {
@@ -267,6 +277,16 @@ class Stream<T> {
         }
       }
     });
+  }
+
+  tap(effect: (value: T) => void) {
+    const self = this;
+    return new Stream<T>(function* () {
+      for (const elem of self) {
+        effect(elem);
+        yield elem;
+      }
+    })
   }
 
   // Consumer
