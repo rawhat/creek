@@ -1,6 +1,6 @@
 {
   "name": "ts-stream",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Lazy lists for TypeScript and JavaScript",
   "main": "src/index.js",
   "scripts": {
@@ -11,6 +11,7 @@
   "license": "ISC",
   "devDependencies": {
     "@types/jest": "^26.0.22",
+    "@types/node": "^14.14.37",
     "jest": "^27.0.0-next.7",
     "prettier": "^2.2.1",
     "ts-jest": "^27.0.0-next.10",

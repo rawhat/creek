@@ -99,6 +99,52 @@ export function iterateAsync<T>(initial: T, mapper: (v: T) => Promise<T>) {
   });
 }
 
+type EventMap<T> = T extends EventTarget
+  ? T extends WebSocket
+    ? WebSocketEventMap
+    : T extends HTMLElement
+    ? HTMLElementEventMap
+    : T extends Element
+    ? ElementEventMap
+    : never
+  : never;
+
+export function fromEvent<
+  B extends EventTarget,
+  T extends keyof EventMap<B> & string,
+  E extends EventMap<B>[T]
+>(target: B, type: T): AsyncStream<E> {
+  return new AsyncStream<E>(async function* () {
+    let resolver: ((event: E) => void) | undefined = undefined;
+    let promise = new Promise((resolve) => {
+      resolver = resolve;
+    });
+    const setupPromise = () => {
+      promise = new Promise((resolve) => {
+        resolver = resolve;
+      });
+    };
+    setupPromise();
+    const handler = (event: E) => {
+      if (resolver) {
+        resolver(event);
+      }
+    };
+    target.addEventListener(
+      type,
+      handler as EventListenerOrEventListenerObject
+    );
+
+    while (true) {
+      if (promise) {
+        const event = ((await promise) as unknown) as E;
+        yield event;
+        setupPromise();
+      }
+    }
+  });
+}
+
 class AsyncStream<T> {
   private generator: () => AsyncGenerator<T, void, void>;
 
@@ -196,7 +242,7 @@ class AsyncStream<T> {
         effect(elem);
         yield elem;
       }
-    })
+    });
   }
 
   // Consumer
@@ -286,7 +332,7 @@ class Stream<T> {
         effect(elem);
         yield elem;
       }
-    })
+    });
   }
 
   // Consumer

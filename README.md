@@ -28,6 +28,17 @@ const s = stream.from(1);
 // Stream<1, 2, 3, ...>
 ```
 
+### `stream.fromEvent`
+Creates a stream from an event listener callback.  Should handle any EventTarget,
+with type-safety on the message type.
+
+```javascript
+const ws = new WebSocket("ws://localhost/echo");
+const s = stream.fromEvent(ws, 'message');
+ws.send("hello, world!");
+// AsyncStream<MessageEvent("hello, world!")>
+```
+
 ### `stream.unfold`
 Generates consecutive values from a base value and an accumulator, which
 determines when the computation is completed.
@@ -129,6 +140,17 @@ Flattens a stream of nested values.
 ```javascript
 const s = stream.from(1).map(n => [n, n]).flatten();
 // Stream<1, 1, 2, 2, 3, 3, ...>
+```
+
+### `stream.tap`
+Performs the provided callback as a side-effect and returns the value back to
+the stream.
+
+```javascript
+const s = stream.from(1).tap(n => console.log("value is", n));
+// value is 1
+// value is 2
+// ...
 ```
 
 ## Consumers

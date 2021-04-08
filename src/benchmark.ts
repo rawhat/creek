@@ -32,6 +32,17 @@ async function runBenchmarks() {
     return arrResult;
   });
 
+  await benchmark("array combination", async () => {
+    const array = range(1, 10000);
+    const arrResult = array
+      .map((n) => n * 2)
+      .filter((n) => n % 2 === 0)
+      .map((n) => n / 2)
+      .filter((n) => n ** 2 < 2500)
+      .reduce((a, b) => a + b, 0);
+    return arrResult;
+  });
+
   await benchmark("array async map", async () => {
     const array = range(1, 10000);
     const arrResult = await Promise.all(array.map(async (n) => n * 2));
@@ -58,6 +69,17 @@ async function runBenchmarks() {
     return stream
       .from(1)
       .take(10000)
+      .fold(0, (a, b) => a + b);
+  });
+
+  await benchmark("stream combination", async () => {
+    return stream
+      .from(1)
+      .take(10000)
+      .map((n) => n * 2)
+      .filter((n) => n % 2 === 0)
+      .map((n) => n / 2)
+      .filter((n) => n ** 2 < 2500)
       .fold(0, (a, b) => a + b);
   });
 
