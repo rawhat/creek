@@ -346,8 +346,19 @@ class Stream {
         const self = this;
         return new AsyncStream(function () {
             return __asyncGenerator(this, arguments, function* () {
-                for (const elem of self) {
-                    yield yield __await(elem);
+                var e_1, _a;
+                try {
+                    for (var self_1 = __asyncValues(self), self_1_1; self_1_1 = yield __await(self_1.next()), !self_1_1.done;) {
+                        const elem = self_1_1.value;
+                        yield yield __await(elem);
+                    }
+                }
+                catch (e_1_1) { e_1 = { error: e_1_1 }; }
+                finally {
+                    try {
+                        if (self_1_1 && !self_1_1.done && (_a = self_1.return)) yield __await(_a.call(self_1));
+                    }
+                    finally { if (e_1) throw e_1.error; }
                 }
             });
         }, this.transforms.concat(wrappedMapper));
@@ -484,9 +495,43 @@ class AsyncStream {
         });
         return new AsyncStream(this.generator, this.transforms.concat(wrapper));
     }
+    concat(other) {
+        const self = this;
+        return new AsyncStream(function () {
+            return __asyncGenerator(this, arguments, function* () {
+                var e_2, _a, e_3, _b;
+                try {
+                    for (var self_2 = __asyncValues(self), self_2_1; self_2_1 = yield __await(self_2.next()), !self_2_1.done;) {
+                        const one = self_2_1.value;
+                        yield yield __await(one);
+                    }
+                }
+                catch (e_2_1) { e_2 = { error: e_2_1 }; }
+                finally {
+                    try {
+                        if (self_2_1 && !self_2_1.done && (_a = self_2.return)) yield __await(_a.call(self_2));
+                    }
+                    finally { if (e_2) throw e_2.error; }
+                }
+                try {
+                    for (var other_1 = __asyncValues(other), other_1_1; other_1_1 = yield __await(other_1.next()), !other_1_1.done;) {
+                        const two = other_1_1.value;
+                        yield yield __await(two);
+                    }
+                }
+                catch (e_3_1) { e_3 = { error: e_3_1 }; }
+                finally {
+                    try {
+                        if (other_1_1 && !other_1_1.done && (_b = other_1.return)) yield __await(_b.call(other_1));
+                    }
+                    finally { if (e_3) throw e_3.error; }
+                }
+            });
+        });
+    }
     // Consumers
     toArray() {
-        var e_1, _a;
+        var e_4, _a;
         return __awaiter(this, void 0, void 0, function* () {
             let results = [];
             try {
@@ -494,7 +539,7 @@ class AsyncStream {
                     const elem = _c.value;
                     const result = yield this.transform(elem);
                     if (result.type === "value") {
-                        results.push(result.value);
+                        results.push(yield result.value);
                     }
                     else if (result.type === "flatten") {
                         if (Array.isArray(result.value)) {
@@ -512,18 +557,18 @@ class AsyncStream {
                     }
                 }
             }
-            catch (e_1_1) { e_1 = { error: e_1_1 }; }
+            catch (e_4_1) { e_4 = { error: e_4_1 }; }
             finally {
                 try {
                     if (_c && !_c.done && (_a = _b.return)) yield _a.call(_b);
                 }
-                finally { if (e_1) throw e_1.error; }
+                finally { if (e_4) throw e_4.error; }
             }
             return results;
         });
     }
     fold(initial, reducer) {
-        var e_2, _a;
+        var e_5, _a;
         return __awaiter(this, void 0, void 0, function* () {
             let accumulator = initial;
             try {
@@ -549,18 +594,18 @@ class AsyncStream {
                     }
                 }
             }
-            catch (e_2_1) { e_2 = { error: e_2_1 }; }
+            catch (e_5_1) { e_5 = { error: e_5_1 }; }
             finally {
                 try {
                     if (_c && !_c.done && (_a = _b.return)) yield _a.call(_b);
                 }
-                finally { if (e_2) throw e_2.error; }
+                finally { if (e_5) throw e_5.error; }
             }
             return accumulator;
         });
     }
     forEach(effect) {
-        var e_3, _a;
+        var e_6, _a;
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 for (var _b = __asyncValues(this.generator()), _c; _c = yield _b.next(), !_c.done;) {
@@ -574,12 +619,12 @@ class AsyncStream {
                     }
                 }
             }
-            catch (e_3_1) { e_3 = { error: e_3_1 }; }
+            catch (e_6_1) { e_6 = { error: e_6_1 }; }
             finally {
                 try {
                     if (_c && !_c.done && (_a = _b.return)) yield _a.call(_b);
                 }
-                finally { if (e_3) throw e_3.error; }
+                finally { if (e_6) throw e_6.error; }
             }
         });
     }
@@ -602,7 +647,7 @@ class AsyncStream {
         const self = this;
         return (function () {
             return __asyncGenerator(this, arguments, function* () {
-                var e_4, _a;
+                var e_7, _a;
                 try {
                     for (var _b = __asyncValues(self.generator()), _c; _c = yield __await(_b.next()), !_c.done;) {
                         const elem = _c.value;
@@ -615,12 +660,12 @@ class AsyncStream {
                         }
                     }
                 }
-                catch (e_4_1) { e_4 = { error: e_4_1 }; }
+                catch (e_7_1) { e_7 = { error: e_7_1 }; }
                 finally {
                     try {
                         if (_c && !_c.done && (_a = _b.return)) yield __await(_a.call(_b));
                     }
-                    finally { if (e_4) throw e_4.error; }
+                    finally { if (e_7) throw e_7.error; }
                 }
             });
         })();

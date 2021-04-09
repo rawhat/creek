@@ -132,4 +132,24 @@ describe("Stream", () => {
 
     expect(arr).toStrictEqual([0, 1, 2, 3]);
   });
+
+  it("should lift to async", async () => {
+    const arr = await stream
+      .fromArray([1, 2, 3])
+      .mapAsync(async (n) => n * 2)
+      .toArray();
+
+    expect(arr).toStrictEqual([2, 4, 6]);
+  });
+
+  it("should concatenate two streams", async () => {
+    const s1 = stream.fromArray([1, 2, 3]).mapAsync(async (n) => n * 2);
+    const s2 = stream.fromArray([4, 5, 6]).mapAsync(async (n) => n * 2);
+    const result = await s1
+      .concat(s2)
+      .map(async (n) => n * 2)
+      .toArray();
+
+    expect(result).toStrictEqual([4, 8, 12, 16, 20, 24]);
+  });
 });

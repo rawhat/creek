@@ -153,6 +153,17 @@ const s = stream.from(1).tap(n => console.log("value is", n));
 // ...
 ```
 
+### `stream.concat`
+Appends the entries from another stream onto the end of the current.  The left
+stream must be finite.
+
+```javascript
+const s1 = stream.fromArray([1, 2, 3]);
+const s2 = stream.fromArray([4, 5, 6]);
+const s3 = s1.concat(s2);
+// Stream<1, 2, 3, 4, 5, 6>
+```
+
 ## Consumers
 
 ### `stream.take`

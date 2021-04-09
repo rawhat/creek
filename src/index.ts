@@ -268,7 +268,7 @@ class Stream<T, R> {
     for (const elem of this.generator()) {
       const result = this.transform(elem);
       if (result.type === "value") {
-        results.push((result.value as unknown) as R);
+        results.push(result.value);
       } else if (result.type === "flatten") {
         if (Array.isArray(result.value)) {
           results.push(...result.value);
@@ -346,9 +346,9 @@ class Stream<T, R> {
       return { type: "value", value: mapper(await entry.value) };
     };
     const self = this;
-    return new AsyncStream(async function* () {
-      for (const elem of self) {
-        yield elem;
+    return new AsyncStream<T, R>(async function* () {
+      for await (const elem of self) {
+        yield (elem as unknown) as T;
       }
     }, this.transforms.concat(wrappedMapper));
   }
@@ -539,6 +539,18 @@ class AsyncStream<T, R> {
     );
   }
 
+  concat<V>(other: AsyncStream<V, V>): AsyncStream<R | V, R | V> {
+    const self = this;
+    return new AsyncStream<R | V, R | V>(async function* () {
+      for await (const one of self) {
+        yield one;
+      }
+      for await (const two of other) {
+        yield two;
+      }
+    });
+  }
+
   // Consumers
 
   async toArray(): Promise<R[]> {
@@ -546,7 +558,7 @@ class AsyncStream<T, R> {
     for await (const elem of this.generator()) {
       const result = await this.transform(elem);
       if (result.type === "value") {
-        results.push((result.value as unknown) as R);
+        results.push(await result.value);
       } else if (result.type === "flatten") {
         if (Array.isArray(result.value)) {
           results.push(...(await Promise.all(result.value)));
