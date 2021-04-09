@@ -253,6 +253,15 @@ class Stream {
         };
         return new Stream(this.generator, this.transforms.concat(wrapper));
     }
+    tap(effect) {
+        const wrapper = (entry) => {
+            if (entry.type === "value") {
+                effect(entry.value);
+            }
+            return entry;
+        };
+        return new Stream(this.generator, this.transforms.concat(wrapper));
+    }
     // Consumers
     toArray() {
         let results = [];
@@ -463,6 +472,15 @@ class AsyncStream {
                 return entry;
             }
             return { type: "flatten", value: entry.value };
+        });
+        return new AsyncStream(this.generator, this.transforms.concat(wrapper));
+    }
+    tap(effect) {
+        const wrapper = (entry) => __awaiter(this, void 0, void 0, function* () {
+            if (entry.type === "value") {
+                effect(yield entry.value);
+            }
+            return entry;
         });
         return new AsyncStream(this.generator, this.transforms.concat(wrapper));
     }

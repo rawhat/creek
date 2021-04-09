@@ -251,6 +251,16 @@ class Stream<T, R> {
     return new Stream<T, R>(this.generator, this.transforms.concat(wrapper));
   }
 
+  tap(effect: (value: T) => void) {
+    const wrapper = (entry: StreamEntry<T>): StreamEntry<T> => {
+      if (entry.type === "value") {
+        effect(entry.value);
+      }
+      return entry;
+    };
+    return new Stream<T, T>(this.generator, this.transforms.concat(wrapper));
+  }
+
   // Consumers
 
   toArray(): R[] {
@@ -507,6 +517,21 @@ class AsyncStream<T, R> {
         return entry;
       }
       return { type: "flatten", value: entry.value };
+    };
+    return new AsyncStream<T, R>(
+      this.generator,
+      this.transforms.concat(wrapper)
+    );
+  }
+
+  tap(effect: (value: T) => Promise<void>) {
+    const wrapper = async (
+      entry: AsyncStreamEntry<T>
+    ): Promise<AsyncStreamResult<T>> => {
+      if (entry.type === "value") {
+        effect(await entry.value);
+      }
+      return entry;
     };
     return new AsyncStream<T, R>(
       this.generator,
