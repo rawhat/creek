@@ -1,11 +1,11 @@
 export function of<T>(elem: T) {
-  return new Stream<T>(function* () {
+  return new Stream<T, T>(function* () {
     yield elem;
   });
 }
 
 export function fromArray<T>(elems: T[]) {
-  return new Stream<T>(function* () {
+  return new Stream<T, T>(function* () {
     for (let elem of elems) {
       yield elem;
     }
@@ -14,7 +14,7 @@ export function fromArray<T>(elems: T[]) {
 
 export function from(n: number) {
   let num = n;
-  return new Stream<number>(function* () {
+  return new Stream<number, number>(function* () {
     while (true) {
       yield num++;
     }
@@ -23,7 +23,7 @@ export function from(n: number) {
 
 export function unfold<T, R>(initial: R, mapper: (v: R) => [T, R] | undefined) {
   let acc = initial;
-  return new Stream<T>(function* () {
+  return new Stream<T, R>(function* () {
     while (true) {
       const mapped = mapper(acc);
       if (mapped === undefined) {
@@ -37,7 +37,7 @@ export function unfold<T, R>(initial: R, mapper: (v: R) => [T, R] | undefined) {
 
 export function iterate<T>(initial: T, mapper: (v: T) => T) {
   let acc: T;
-  return new Stream<T>(function* () {
+  return new Stream<T, T>(function* () {
     while (true) {
       if (!acc) {
         acc = initial;
@@ -52,7 +52,7 @@ export function iterate<T>(initial: T, mapper: (v: T) => T) {
 
 export function interval(n: number) {
   let count = 0;
-  return new AsyncStream<number>(async function* () {
+  return new AsyncStream<number, number>(async function* () {
     while (true) {
       await delay(n);
       yield count++;
@@ -61,7 +61,7 @@ export function interval(n: number) {
 }
 
 export function timer(n: number) {
-  return new AsyncStream<number>(async function* () {
+  return new AsyncStream<number, number>(async function* () {
     await delay(n);
     yield 0;
   });
@@ -72,7 +72,7 @@ export function unfoldAsync<T, R>(
   mapper: (v: R) => Promise<[T, R] | undefined>
 ) {
   let acc = initial;
-  return new AsyncStream<T>(async function* () {
+  return new AsyncStream<T, T>(async function* () {
     while (true) {
       const mapped = await mapper(acc);
       if (mapped === undefined) {
@@ -86,7 +86,7 @@ export function unfoldAsync<T, R>(
 
 export function iterateAsync<T>(initial: T, mapper: (v: T) => Promise<T>) {
   let acc: T;
-  return new AsyncStream<T>(async function* () {
+  return new AsyncStream<T, T>(async function* () {
     while (true) {
       if (!acc) {
         acc = initial;
@@ -113,8 +113,8 @@ export function fromEvent<
   B extends EventTarget,
   T extends keyof EventMap<B> & string,
   E extends EventMap<B>[T]
->(target: B, type: T): AsyncStream<E> {
-  return new AsyncStream<E>(async function* () {
+>(target: B, type: T): AsyncStream<E, E> {
+  return new AsyncStream<E, E>(async function* () {
     let resolver: ((event: E) => void) | undefined = undefined;
     let promise = new Promise((resolve) => {
       resolver = resolve;
@@ -145,292 +145,461 @@ export function fromEvent<
   });
 }
 
-class AsyncStream<T> {
-  private generator: () => AsyncGenerator<T, void, void>;
+type StreamEntry<T> =
+  | { type: "skip" }
+  | { type: "value"; value: T }
+  | { type: "flatten"; value: T };
+type StreamResult<T> = StreamEntry<T> | { type: "halt" };
 
-  constructor(generator: () => AsyncGenerator<T, void, void>) {
-    this.generator = generator;
-  }
-
-  // Transformers
-
-  take(n: number) {
-    const self = this;
-    let count = 0;
-    return new AsyncStream<T>(async function* () {
-      for await (const elem of self) {
-        if (count === n) {
-          return;
-        }
-        count++;
-        yield elem;
-      }
-    });
-  }
-
-  drop(n: number) {
-    const self = this;
-    let count = 0;
-    return new AsyncStream<T>(async function* () {
-      for await (const elem of self) {
-        if (count++ < n) {
-          continue;
-        }
-        yield elem;
-      }
-    });
-  }
-
-  takeUntil(test: (value: T) => boolean) {
-    const self = this;
-    return new AsyncStream<T>(async function* () {
-      for await (const elem of self) {
-        if (test(elem)) {
-          return;
-        }
-        yield elem;
-      }
-    });
-  }
-
-  flatten() {
-    const self = this;
-    return new AsyncStream<T>(async function* () {
-      for await (const elem of self) {
-        if (Array.isArray(elem)) {
-          yield* elem;
-        } else {
-          yield elem;
-        }
-      }
-    });
-  }
-
-  map<R>(mapper: (value: T) => R) {
-    const self = this;
-    return new AsyncStream<R>(async function* () {
-      for await (const elem of self) {
-        yield mapper(elem);
-      }
-    });
-  }
-
-  flatMap<R>(mapper: (value: T) => R[]) {
-    const self = this;
-    return new AsyncStream<R>(async function* () {
-      for await (const elem of self) {
-        yield* mapper(elem);
-      }
-    });
-  }
-
-  filter(filter: (value: T) => boolean) {
-    const self = this;
-    return new AsyncStream<T>(async function* () {
-      for await (const elem of self) {
-        if (filter(elem)) {
-          yield elem;
-        }
-      }
-    });
-  }
-
-  tap(effect: (value: T) => void) {
-    const self = this;
-    return new AsyncStream<T>(async function* () {
-      for await (const elem of self) {
-        effect(elem);
-        yield elem;
-      }
-    });
-  }
-
-  // Consumer
-
-  async fold<R>(initial: R, folder: (value: T, accum: R) => Promise<R>) {
-    let acc = initial;
-    for await (const elem of this.generator()) {
-      acc = await folder(elem, acc);
-    }
-    return acc;
-  }
-
-  async toArray(): Promise<T[]> {
-    const items: T[] = [];
-    for await (const elem of this.generator()) {
-      items.push(elem);
-    }
-    return items;
-  }
-
-  async forEach(func: (value: T) => Promise<void>) {
-    for await (const elem of this) {
-      await func(elem);
-    }
-  }
-
-  [Symbol.asyncIterator]() {
-    return this.generator();
-  }
-}
-
-class Stream<T> {
+class Stream<T, R> {
   private generator: () => Generator<T, void, void>;
+  private transforms: Function[] = [];
 
-  constructor(generator: () => Generator<T, void, void>) {
+  constructor(
+    generator: () => Generator<T, void, void>,
+    transforms: Function[] = []
+  ) {
     this.generator = generator;
+    this.transforms = transforms;
   }
 
   // Transformers
 
-  flatten() {
-    const self = this;
-    return new Stream<T>(function* () {
-      for (const elem of self) {
-        if (Array.isArray(elem)) {
-          yield* elem;
-        } else {
-          yield elem;
-        }
+  map<V>(mapper: (value: T) => V): Stream<T, V> {
+    const wrappedMapper = (entry: StreamEntry<T>): StreamEntry<V> => {
+      if (entry.type === "skip") {
+        return entry;
       }
-    });
+      return { type: "value", value: mapper(entry.value) };
+    };
+    return new Stream(this.generator, this.transforms.concat(wrappedMapper));
   }
 
-  map<R>(mapper: (value: T) => R) {
-    const self = this;
-    return new Stream<R>(function* () {
-      for (const elem of self) {
-        yield mapper(elem);
+  filter(predicate: (value: T) => boolean): Stream<T, R> {
+    const wrappedFilter = (entry: StreamEntry<T>): StreamEntry<T> => {
+      if (entry.type === "skip") {
+        return entry;
       }
-    });
+      if (!predicate(entry.value)) {
+        return { type: "skip" };
+      }
+      return entry;
+    };
+    return new Stream(this.generator, this.transforms.concat(wrappedFilter));
   }
 
-  flatMap<R>(mapper: (value: T) => R[]) {
-    const self = this;
-    return new Stream<R>(function* () {
-      for (const elem of self) {
-        yield* mapper(elem);
+  flatMap<V>(mapper: (value: T) => V) {
+    const wrapped = (entry: StreamEntry<T>): StreamEntry<V> => {
+      if (entry.type === "skip") {
+        return entry;
       }
-    });
+      return { type: "flatten", value: mapper(entry.value) };
+    };
+    return new Stream<T, V>(this.generator, this.transforms.concat(wrapped));
   }
 
-  filter(filter: (value: T) => boolean) {
-    const self = this;
-    return new Stream<T>(function* () {
-      for (const elem of self) {
-        if (filter(elem)) {
-          yield elem;
-        }
-      }
-    });
-  }
-
-  tap(effect: (value: T) => void) {
-    const self = this;
-    return new Stream<T>(function* () {
-      for (const elem of self) {
-        effect(elem);
-        yield elem;
-      }
-    });
-  }
-
-  // Consumer
-
-  take(n: number) {
-    const self = this;
+  take(n: number): Stream<T, R> {
     let count = 0;
-    return new Stream<T>(function* () {
-      for (const elem of self) {
-        if (count === n) {
-          return;
-        }
-        count++;
-        yield elem;
+    const wrapper = (entry: StreamEntry<T>) => {
+      if (entry.type === "skip") {
+        return entry;
       }
-    });
+      if (count === n) {
+        return { type: "halt" };
+      }
+      count++;
+      return { type: "value", value: entry.value };
+    };
+    return new Stream(this.generator, this.transforms.concat(wrapper));
+  }
+
+  takeUntil(predicate: (value: T) => boolean) {
+    const wrapper = (entry: StreamEntry<T>) => {
+      if (entry.type === "skip") {
+        return entry;
+      }
+      if (predicate(entry.value)) {
+        return { type: "halt" };
+      }
+      return entry;
+    };
+    return new Stream<T, T>(this.generator, this.transforms.concat(wrapper));
   }
 
   drop(n: number) {
-    const self = this;
     let count = 0;
-    return new Stream<T>(function* () {
-      for (const elem of self) {
-        if (count++ < n) {
-          continue;
-        }
-        yield elem;
+    const wrapper = (entry: StreamEntry<T>) => {
+      if (entry.type === "skip") {
+        return entry;
       }
-    });
-  }
-
-  takeUntil(test: (value: T) => boolean) {
-    const self = this;
-    return new Stream<T>(function* () {
-      for (const elem of self) {
-        if (test(elem)) {
-          return;
-        }
-        yield elem;
+      if (entry.type === "value" && count < n) {
+        count++;
+        return { type: "skip" };
       }
-    });
+      return entry;
+    };
+    return new Stream<T, T>(this.generator, this.transforms.concat(wrapper));
   }
 
-  fold<R>(initial: R, folder: (value: T, accum: R) => R) {
-    let acc = initial;
+  flatten() {
+    const wrapper = (entry: StreamEntry<T>): StreamEntry<T> => {
+      if (entry.type === "skip") {
+        return entry;
+      }
+      return { type: "flatten", value: entry.value };
+    };
+    return new Stream<T, R>(this.generator, this.transforms.concat(wrapper));
+  }
+
+  // Consumers
+
+  toArray(): R[] {
+    let results: R[] = [];
     for (const elem of this.generator()) {
-      acc = folder(elem, acc);
+      const result = this.transform(elem);
+      if (result.type === "value") {
+        results.push((result.value as unknown) as R);
+      } else if (result.type === "flatten") {
+        if (Array.isArray(result.value)) {
+          results.push(...result.value);
+        } else {
+          results.push(result.value);
+        }
+      } else if (result.type === "halt") {
+        break;
+      } else {
+        continue;
+      }
     }
-    return acc;
+    return results;
   }
 
-  toArray(): T[] {
-    const items: T[] = [];
+  fold<V>(initial: V, reducer: (next: R, accumulator: V) => V) {
+    let accumulator = initial;
     for (const elem of this.generator()) {
-      items.push(elem);
+      const result = this.transform(elem);
+      if (result.type === "value") {
+        accumulator = reducer(result.value, accumulator);
+      } else if (result.type === "flatten") {
+        if (Array.isArray(result.value)) {
+          accumulator = result.value.reduce(
+            (v, acc) => reducer(v, acc),
+            accumulator
+          );
+        } else {
+          accumulator = reducer(result.value, accumulator);
+        }
+      } else if (result.type === "halt") {
+        return accumulator;
+      } else {
+        continue;
+      }
     }
-    return items;
+    return accumulator;
   }
 
-  forEach(func: (value: T) => void) {
-    for (const elem of this) {
-      func(elem);
+  forEach(effect: (value: R) => void) {
+    for (const elem of this.generator()) {
+      const result = this.transform(elem);
+      if (result.type === "halt") {
+        return;
+      }
+      if (result.type === "value") {
+        effect(result.value);
+      }
     }
+  }
+
+  private transform(value: T): StreamResult<R> {
+    let acc = { type: "value", value };
+    for (const transform of this.transforms) {
+      if (acc.type === "halt") {
+        return acc as StreamEntry<R>;
+      }
+      if (acc.type === "skip") {
+        continue;
+      }
+      acc = transform(acc);
+    }
+    return acc as StreamEntry<R>;
   }
 
   // Lift to async
 
   mapAsync<R>(mapper: (value: T) => Promise<R>) {
-    const self = this;
-    return new AsyncStream<R>(async function* () {
-      for (const elem of self) {
-        yield await mapper(elem);
+    const wrappedMapper = async (
+      entry: AsyncStreamEntry<T>
+    ): Promise<AsyncStreamEntry<R>> => {
+      if (entry.type === "skip") {
+        return entry;
       }
-    });
+      return { type: "value", value: mapper(await entry.value) };
+    };
+    const self = this;
+    return new AsyncStream(async function* () {
+      for (const elem of self) {
+        yield elem;
+      }
+    }, this.transforms.concat(wrappedMapper));
   }
 
-  filterAsync(test: (value: T) => Promise<boolean>) {
+  filterAsync(predicate: (value: R) => Promise<boolean>) {
     const self = this;
-    return new AsyncStream<T>(async function* () {
+    const newStream = new AsyncStream<R, R>(async function* () {
       for (const elem of self) {
-        if (await test(elem)) {
-          yield elem;
-        }
+        yield elem;
       }
-    });
+    }, this.transforms);
+    return newStream.filter(predicate);
   }
 
-  async foldAsync<R>(initial: R, folder: (value: T, accum: R) => Promise<R>) {
+  foldAsync<V>(initial: V, reducer: (next: R, acc: V) => Promise<V>) {
     const self = this;
-    let acc = initial;
-    for (const elem of self) {
-      acc = await folder(elem, acc);
-    }
-    return acc;
+    const newStream = new AsyncStream<R, R>(async function* () {
+      for (const elem of self) {
+        yield elem;
+      }
+    }, this.transforms);
+    return newStream.fold<V>(initial, reducer);
   }
 
   [Symbol.iterator]() {
-    return this.generator();
+    const self = this;
+    return (function* () {
+      for (const elem of self.generator()) {
+        const result = self.transform(elem);
+        if (result.type === "halt") {
+          return;
+        }
+        if (result.type === "value") {
+          yield result.value;
+        }
+      }
+    })();
+  }
+}
+
+type AsyncStreamEntry<T> = StreamEntry<Promise<T>>;
+type AsyncStreamResult<T> = { type: "halt" } | AsyncStreamEntry<T>;
+
+class AsyncStream<T, R> {
+  private generator: () => AsyncGenerator<T, void, void>;
+  private transforms: Function[] = [];
+
+  constructor(
+    generator: () => AsyncGenerator<T, void, void>,
+    transforms: Function[] = []
+  ) {
+    this.generator = generator;
+    this.transforms = transforms;
+  }
+
+  // Transformers
+
+  map<V>(mapper: (value: T) => Promise<V>): AsyncStream<T, V> {
+    const wrappedMapper = async (
+      entry: AsyncStreamEntry<T>
+    ): Promise<AsyncStreamEntry<V>> => {
+      if (entry.type === "skip") {
+        return entry;
+      }
+      return { type: "value", value: mapper(await entry.value) };
+    };
+    return new AsyncStream(
+      this.generator,
+      this.transforms.concat(wrappedMapper)
+    );
+  }
+
+  filter(predicate: (value: T) => Promise<boolean>): AsyncStream<T, T> {
+    const wrappedFilter = async (
+      entry: AsyncStreamEntry<T>
+    ): Promise<AsyncStreamEntry<T>> => {
+      if (entry.type === "skip") {
+        return entry;
+      }
+      if (!(await predicate(await entry.value))) {
+        return { type: "skip" };
+      }
+      return entry;
+    };
+    return new AsyncStream(
+      this.generator,
+      this.transforms.concat(wrappedFilter)
+    );
+  }
+
+  flatMap<V>(mapper: (value: T) => Promise<V>) {
+    const wrapped = async (
+      entry: AsyncStreamEntry<T>
+    ): Promise<AsyncStreamEntry<V>> => {
+      if (entry.type === "skip") {
+        return entry;
+      }
+      return { type: "flatten", value: mapper(await entry.value) };
+    };
+    return new AsyncStream<T, V>(
+      this.generator,
+      this.transforms.concat(wrapped)
+    );
+  }
+
+  take(n: number): AsyncStream<T, R> {
+    let count = 0;
+    const wrapper = async (
+      entry: AsyncStreamEntry<T>
+    ): Promise<AsyncStreamResult<T>> => {
+      if (entry.type === "skip") {
+        return entry;
+      }
+      if (count === n) {
+        return { type: "halt" };
+      }
+      count++;
+      return { type: "value", value: entry.value };
+    };
+    return new AsyncStream(this.generator, this.transforms.concat(wrapper));
+  }
+
+  takeUntil(predicate: (value: T) => Promise<boolean>) {
+    const wrapper = async (
+      entry: AsyncStreamEntry<T>
+    ): Promise<AsyncStreamResult<T>> => {
+      if (entry.type === "skip") {
+        return entry;
+      }
+      if (await predicate(await entry.value)) {
+        return { type: "halt" };
+      }
+      return entry;
+    };
+    return new AsyncStream<T, T>(
+      this.generator,
+      this.transforms.concat(wrapper)
+    );
+  }
+
+  drop(n: number) {
+    let count = 0;
+    const wrapper = async (
+      entry: AsyncStreamEntry<T>
+    ): Promise<AsyncStreamResult<T>> => {
+      if (entry.type === "skip") {
+        return entry;
+      }
+      if (entry.type === "value" && count < n) {
+        count++;
+        return { type: "skip" };
+      }
+      return entry;
+    };
+    return new AsyncStream<T, T>(
+      this.generator,
+      this.transforms.concat(wrapper)
+    );
+  }
+
+  flatten() {
+    const wrapper = async (
+      entry: AsyncStreamEntry<T>
+    ): Promise<AsyncStreamEntry<T>> => {
+      if (entry.type === "skip") {
+        return entry;
+      }
+      return { type: "flatten", value: entry.value };
+    };
+    return new AsyncStream<T, R>(
+      this.generator,
+      this.transforms.concat(wrapper)
+    );
+  }
+
+  // Consumers
+
+  async toArray(): Promise<R[]> {
+    let results: R[] = [];
+    for await (const elem of this.generator()) {
+      const result = await this.transform(elem);
+      if (result.type === "value") {
+        results.push((result.value as unknown) as R);
+      } else if (result.type === "flatten") {
+        if (Array.isArray(result.value)) {
+          results.push(...(await Promise.all(result.value)));
+        } else {
+          results.push(await result.value);
+        }
+      } else if (result.type === "halt") {
+        break;
+      } else {
+        continue;
+      }
+    }
+    return results;
+  }
+
+  async fold<V>(initial: V, reducer: (next: R, accumulator: V) => Promise<V>) {
+    let accumulator = initial;
+    for await (const elem of this.generator()) {
+      const result = await this.transform(elem);
+      if (result.type === "value") {
+        accumulator = await reducer(await result.value, accumulator);
+      } else if (result.type === "flatten") {
+        if (Array.isArray(result.value)) {
+          accumulator = result.value.reduce(
+            (v, acc) => reducer(v, acc),
+            accumulator
+          );
+        } else {
+          accumulator = await reducer(await result.value, accumulator);
+        }
+      } else if (result.type === "halt") {
+        return accumulator;
+      } else {
+        continue;
+      }
+    }
+    return accumulator;
+  }
+
+  async forEach(effect: (value: R) => void) {
+    for await (const elem of this.generator()) {
+      const result = await this.transform(elem);
+      if (result.type === "halt") {
+        return;
+      }
+      if (result.type === "value") {
+        effect(await result.value);
+      }
+    }
+  }
+
+  private async transform(value: T): Promise<AsyncStreamResult<R>> {
+    let acc = { type: "value", value };
+    for (const transform of this.transforms) {
+      if (acc.type === "halt") {
+        return acc as AsyncStreamResult<R>;
+      }
+      if (acc.type === "skip") {
+        continue;
+      }
+      acc = await transform(acc);
+    }
+    return acc as AsyncStreamResult<R>;
+  }
+
+  [Symbol.asyncIterator]() {
+    const self = this;
+    return (async function* () {
+      for await (const elem of self.generator()) {
+        const result = await self.transform(elem);
+        if (result.type === "halt") {
+          return;
+        }
+        if (result.type === "value") {
+          yield result.value;
+        }
+      }
+    })();
   }
 }
 

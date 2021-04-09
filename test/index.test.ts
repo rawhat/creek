@@ -131,5 +131,5 @@ describe("Stream", () => {
       .toArray();
 
     expect(arr).toStrictEqual([0, 1, 2, 3]);
-  })
+  });
 });

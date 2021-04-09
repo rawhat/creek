@@ -27,11 +27,6 @@ var __asyncValues = (this && this.__asyncValues) || function (o) {
     function verb(n) { i[n] = o[n] && function (v) { return new Promise(function (resolve, reject) { v = o[n](v), settle(resolve, reject, v.done, v.value); }); }; }
     function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
 };
-var __asyncDelegator = (this && this.__asyncDelegator) || function (o) {
-    var i, p;
-    return i = {}, verb("next"), verb("throw", function (e) { throw e; }), verb("return"), i[Symbol.iterator] = function () { return this; }, i;
-    function verb(n, f) { i[n] = o[n] ? function (v) { return (p = !p) ? { value: __await(o[n](v)), done: n === "return" } : f ? f(v) : v; } : f; }
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.fromEvent = exports.iterateAsync = exports.unfoldAsync = exports.timer = exports.interval = exports.iterate = exports.unfold = exports.from = exports.fromArray = exports.of = void 0;
 function of(elem) {
@@ -172,406 +167,445 @@ function fromEvent(target, type) {
     });
 }
 exports.fromEvent = fromEvent;
-class AsyncStream {
-    constructor(generator) {
+class Stream {
+    constructor(generator, transforms = []) {
+        this.transforms = [];
         this.generator = generator;
+        this.transforms = transforms;
     }
     // Transformers
+    map(mapper) {
+        const wrappedMapper = (entry) => {
+            if (entry.type === "skip") {
+                return entry;
+            }
+            return { type: "value", value: mapper(entry.value) };
+        };
+        return new Stream(this.generator, this.transforms.concat(wrappedMapper));
+    }
+    filter(predicate) {
+        const wrappedFilter = (entry) => {
+            if (entry.type === "skip") {
+                return entry;
+            }
+            if (!predicate(entry.value)) {
+                return { type: "skip" };
+            }
+            return entry;
+        };
+        return new Stream(this.generator, this.transforms.concat(wrappedFilter));
+    }
+    flatMap(mapper) {
+        const wrapped = (entry) => {
+            if (entry.type === "skip") {
+                return entry;
+            }
+            return { type: "flatten", value: mapper(entry.value) };
+        };
+        return new Stream(this.generator, this.transforms.concat(wrapped));
+    }
     take(n) {
-        const self = this;
         let count = 0;
-        return new AsyncStream(function () {
-            return __asyncGenerator(this, arguments, function* () {
-                var e_1, _a;
-                try {
-                    for (var self_1 = __asyncValues(self), self_1_1; self_1_1 = yield __await(self_1.next()), !self_1_1.done;) {
-                        const elem = self_1_1.value;
-                        if (count === n) {
-                            return yield __await(void 0);
-                        }
-                        count++;
-                        yield yield __await(elem);
-                    }
-                }
-                catch (e_1_1) { e_1 = { error: e_1_1 }; }
-                finally {
-                    try {
-                        if (self_1_1 && !self_1_1.done && (_a = self_1.return)) yield __await(_a.call(self_1));
-                    }
-                    finally { if (e_1) throw e_1.error; }
-                }
-            });
-        });
+        const wrapper = (entry) => {
+            if (entry.type === "skip") {
+                return entry;
+            }
+            if (count === n) {
+                return { type: "halt" };
+            }
+            count++;
+            return { type: "value", value: entry.value };
+        };
+        return new Stream(this.generator, this.transforms.concat(wrapper));
+    }
+    takeUntil(predicate) {
+        const wrapper = (entry) => {
+            if (entry.type === "skip") {
+                return entry;
+            }
+            if (predicate(entry.value)) {
+                return { type: "halt" };
+            }
+            return entry;
+        };
+        return new Stream(this.generator, this.transforms.concat(wrapper));
     }
     drop(n) {
-        const self = this;
         let count = 0;
-        return new AsyncStream(function () {
-            return __asyncGenerator(this, arguments, function* () {
-                var e_2, _a;
-                try {
-                    for (var self_2 = __asyncValues(self), self_2_1; self_2_1 = yield __await(self_2.next()), !self_2_1.done;) {
-                        const elem = self_2_1.value;
-                        if (count++ < n) {
-                            continue;
-                        }
-                        yield yield __await(elem);
-                    }
-                }
-                catch (e_2_1) { e_2 = { error: e_2_1 }; }
-                finally {
-                    try {
-                        if (self_2_1 && !self_2_1.done && (_a = self_2.return)) yield __await(_a.call(self_2));
-                    }
-                    finally { if (e_2) throw e_2.error; }
-                }
-            });
-        });
-    }
-    takeUntil(test) {
-        const self = this;
-        return new AsyncStream(function () {
-            return __asyncGenerator(this, arguments, function* () {
-                var e_3, _a;
-                try {
-                    for (var self_3 = __asyncValues(self), self_3_1; self_3_1 = yield __await(self_3.next()), !self_3_1.done;) {
-                        const elem = self_3_1.value;
-                        if (test(elem)) {
-                            return yield __await(void 0);
-                        }
-                        yield yield __await(elem);
-                    }
-                }
-                catch (e_3_1) { e_3 = { error: e_3_1 }; }
-                finally {
-                    try {
-                        if (self_3_1 && !self_3_1.done && (_a = self_3.return)) yield __await(_a.call(self_3));
-                    }
-                    finally { if (e_3) throw e_3.error; }
-                }
-            });
-        });
+        const wrapper = (entry) => {
+            if (entry.type === "skip") {
+                return entry;
+            }
+            if (entry.type === "value" && count < n) {
+                count++;
+                return { type: "skip" };
+            }
+            return entry;
+        };
+        return new Stream(this.generator, this.transforms.concat(wrapper));
     }
     flatten() {
+        const wrapper = (entry) => {
+            if (entry.type === "skip") {
+                return entry;
+            }
+            return { type: "flatten", value: entry.value };
+        };
+        return new Stream(this.generator, this.transforms.concat(wrapper));
+    }
+    // Consumers
+    toArray() {
+        let results = [];
+        for (const elem of this.generator()) {
+            const result = this.transform(elem);
+            if (result.type === "value") {
+                results.push(result.value);
+            }
+            else if (result.type === "flatten") {
+                if (Array.isArray(result.value)) {
+                    results.push(...result.value);
+                }
+                else {
+                    results.push(result.value);
+                }
+            }
+            else if (result.type === "halt") {
+                break;
+            }
+            else {
+                continue;
+            }
+        }
+        return results;
+    }
+    fold(initial, reducer) {
+        let accumulator = initial;
+        for (const elem of this.generator()) {
+            const result = this.transform(elem);
+            if (result.type === "value") {
+                accumulator = reducer(result.value, accumulator);
+            }
+            else if (result.type === "flatten") {
+                if (Array.isArray(result.value)) {
+                    accumulator = result.value.reduce((v, acc) => reducer(v, acc), accumulator);
+                }
+                else {
+                    accumulator = reducer(result.value, accumulator);
+                }
+            }
+            else if (result.type === "halt") {
+                return accumulator;
+            }
+            else {
+                continue;
+            }
+        }
+        return accumulator;
+    }
+    forEach(effect) {
+        for (const elem of this.generator()) {
+            const result = this.transform(elem);
+            if (result.type === "halt") {
+                return;
+            }
+            if (result.type === "value") {
+                effect(result.value);
+            }
+        }
+    }
+    transform(value) {
+        let acc = { type: "value", value };
+        for (const transform of this.transforms) {
+            if (acc.type === "halt") {
+                return acc;
+            }
+            if (acc.type === "skip") {
+                continue;
+            }
+            acc = transform(acc);
+        }
+        return acc;
+    }
+    // Lift to async
+    mapAsync(mapper) {
+        const wrappedMapper = (entry) => __awaiter(this, void 0, void 0, function* () {
+            if (entry.type === "skip") {
+                return entry;
+            }
+            return { type: "value", value: mapper(yield entry.value) };
+        });
         const self = this;
         return new AsyncStream(function () {
+            return __asyncGenerator(this, arguments, function* () {
+                for (const elem of self) {
+                    yield yield __await(elem);
+                }
+            });
+        }, this.transforms.concat(wrappedMapper));
+    }
+    filterAsync(predicate) {
+        const self = this;
+        const newStream = new AsyncStream(function () {
+            return __asyncGenerator(this, arguments, function* () {
+                for (const elem of self) {
+                    yield yield __await(elem);
+                }
+            });
+        }, this.transforms);
+        return newStream.filter(predicate);
+    }
+    foldAsync(initial, reducer) {
+        const self = this;
+        const newStream = new AsyncStream(function () {
+            return __asyncGenerator(this, arguments, function* () {
+                for (const elem of self) {
+                    yield yield __await(elem);
+                }
+            });
+        }, this.transforms);
+        return newStream.fold(initial, reducer);
+    }
+    [Symbol.iterator]() {
+        const self = this;
+        return (function* () {
+            for (const elem of self.generator()) {
+                const result = self.transform(elem);
+                if (result.type === "halt") {
+                    return;
+                }
+                if (result.type === "value") {
+                    yield result.value;
+                }
+            }
+        })();
+    }
+}
+class AsyncStream {
+    constructor(generator, transforms = []) {
+        this.transforms = [];
+        this.generator = generator;
+        this.transforms = transforms;
+    }
+    // Transformers
+    map(mapper) {
+        const wrappedMapper = (entry) => __awaiter(this, void 0, void 0, function* () {
+            if (entry.type === "skip") {
+                return entry;
+            }
+            return { type: "value", value: mapper(yield entry.value) };
+        });
+        return new AsyncStream(this.generator, this.transforms.concat(wrappedMapper));
+    }
+    filter(predicate) {
+        const wrappedFilter = (entry) => __awaiter(this, void 0, void 0, function* () {
+            if (entry.type === "skip") {
+                return entry;
+            }
+            if (!(yield predicate(yield entry.value))) {
+                return { type: "skip" };
+            }
+            return entry;
+        });
+        return new AsyncStream(this.generator, this.transforms.concat(wrappedFilter));
+    }
+    flatMap(mapper) {
+        const wrapped = (entry) => __awaiter(this, void 0, void 0, function* () {
+            if (entry.type === "skip") {
+                return entry;
+            }
+            return { type: "flatten", value: mapper(yield entry.value) };
+        });
+        return new AsyncStream(this.generator, this.transforms.concat(wrapped));
+    }
+    take(n) {
+        let count = 0;
+        const wrapper = (entry) => __awaiter(this, void 0, void 0, function* () {
+            if (entry.type === "skip") {
+                return entry;
+            }
+            if (count === n) {
+                return { type: "halt" };
+            }
+            count++;
+            return { type: "value", value: entry.value };
+        });
+        return new AsyncStream(this.generator, this.transforms.concat(wrapper));
+    }
+    takeUntil(predicate) {
+        const wrapper = (entry) => __awaiter(this, void 0, void 0, function* () {
+            if (entry.type === "skip") {
+                return entry;
+            }
+            if (yield predicate(yield entry.value)) {
+                return { type: "halt" };
+            }
+            return entry;
+        });
+        return new AsyncStream(this.generator, this.transforms.concat(wrapper));
+    }
+    drop(n) {
+        let count = 0;
+        const wrapper = (entry) => __awaiter(this, void 0, void 0, function* () {
+            if (entry.type === "skip") {
+                return entry;
+            }
+            if (entry.type === "value" && count < n) {
+                count++;
+                return { type: "skip" };
+            }
+            return entry;
+        });
+        return new AsyncStream(this.generator, this.transforms.concat(wrapper));
+    }
+    flatten() {
+        const wrapper = (entry) => __awaiter(this, void 0, void 0, function* () {
+            if (entry.type === "skip") {
+                return entry;
+            }
+            return { type: "flatten", value: entry.value };
+        });
+        return new AsyncStream(this.generator, this.transforms.concat(wrapper));
+    }
+    // Consumers
+    toArray() {
+        var e_1, _a;
+        return __awaiter(this, void 0, void 0, function* () {
+            let results = [];
+            try {
+                for (var _b = __asyncValues(this.generator()), _c; _c = yield _b.next(), !_c.done;) {
+                    const elem = _c.value;
+                    const result = yield this.transform(elem);
+                    if (result.type === "value") {
+                        results.push(result.value);
+                    }
+                    else if (result.type === "flatten") {
+                        if (Array.isArray(result.value)) {
+                            results.push(...(yield Promise.all(result.value)));
+                        }
+                        else {
+                            results.push(yield result.value);
+                        }
+                    }
+                    else if (result.type === "halt") {
+                        break;
+                    }
+                    else {
+                        continue;
+                    }
+                }
+            }
+            catch (e_1_1) { e_1 = { error: e_1_1 }; }
+            finally {
+                try {
+                    if (_c && !_c.done && (_a = _b.return)) yield _a.call(_b);
+                }
+                finally { if (e_1) throw e_1.error; }
+            }
+            return results;
+        });
+    }
+    fold(initial, reducer) {
+        var e_2, _a;
+        return __awaiter(this, void 0, void 0, function* () {
+            let accumulator = initial;
+            try {
+                for (var _b = __asyncValues(this.generator()), _c; _c = yield _b.next(), !_c.done;) {
+                    const elem = _c.value;
+                    const result = yield this.transform(elem);
+                    if (result.type === "value") {
+                        accumulator = yield reducer(yield result.value, accumulator);
+                    }
+                    else if (result.type === "flatten") {
+                        if (Array.isArray(result.value)) {
+                            accumulator = result.value.reduce((v, acc) => reducer(v, acc), accumulator);
+                        }
+                        else {
+                            accumulator = yield reducer(yield result.value, accumulator);
+                        }
+                    }
+                    else if (result.type === "halt") {
+                        return accumulator;
+                    }
+                    else {
+                        continue;
+                    }
+                }
+            }
+            catch (e_2_1) { e_2 = { error: e_2_1 }; }
+            finally {
+                try {
+                    if (_c && !_c.done && (_a = _b.return)) yield _a.call(_b);
+                }
+                finally { if (e_2) throw e_2.error; }
+            }
+            return accumulator;
+        });
+    }
+    forEach(effect) {
+        var e_3, _a;
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                for (var _b = __asyncValues(this.generator()), _c; _c = yield _b.next(), !_c.done;) {
+                    const elem = _c.value;
+                    const result = yield this.transform(elem);
+                    if (result.type === "halt") {
+                        return;
+                    }
+                    if (result.type === "value") {
+                        effect(yield result.value);
+                    }
+                }
+            }
+            catch (e_3_1) { e_3 = { error: e_3_1 }; }
+            finally {
+                try {
+                    if (_c && !_c.done && (_a = _b.return)) yield _a.call(_b);
+                }
+                finally { if (e_3) throw e_3.error; }
+            }
+        });
+    }
+    transform(value) {
+        return __awaiter(this, void 0, void 0, function* () {
+            let acc = { type: "value", value };
+            for (const transform of this.transforms) {
+                if (acc.type === "halt") {
+                    return acc;
+                }
+                if (acc.type === "skip") {
+                    continue;
+                }
+                acc = yield transform(acc);
+            }
+            return acc;
+        });
+    }
+    [Symbol.asyncIterator]() {
+        const self = this;
+        return (function () {
             return __asyncGenerator(this, arguments, function* () {
                 var e_4, _a;
                 try {
-                    for (var self_4 = __asyncValues(self), self_4_1; self_4_1 = yield __await(self_4.next()), !self_4_1.done;) {
-                        const elem = self_4_1.value;
-                        if (Array.isArray(elem)) {
-                            yield __await(yield* __asyncDelegator(__asyncValues(elem)));
+                    for (var _b = __asyncValues(self.generator()), _c; _c = yield __await(_b.next()), !_c.done;) {
+                        const elem = _c.value;
+                        const result = yield __await(self.transform(elem));
+                        if (result.type === "halt") {
+                            return yield __await(void 0);
                         }
-                        else {
-                            yield yield __await(elem);
+                        if (result.type === "value") {
+                            yield yield __await(result.value);
                         }
                     }
                 }
                 catch (e_4_1) { e_4 = { error: e_4_1 }; }
                 finally {
                     try {
-                        if (self_4_1 && !self_4_1.done && (_a = self_4.return)) yield __await(_a.call(self_4));
+                        if (_c && !_c.done && (_a = _b.return)) yield __await(_a.call(_b));
                     }
                     finally { if (e_4) throw e_4.error; }
                 }
             });
-        });
-    }
-    map(mapper) {
-        const self = this;
-        return new AsyncStream(function () {
-            return __asyncGenerator(this, arguments, function* () {
-                var e_5, _a;
-                try {
-                    for (var self_5 = __asyncValues(self), self_5_1; self_5_1 = yield __await(self_5.next()), !self_5_1.done;) {
-                        const elem = self_5_1.value;
-                        yield yield __await(mapper(elem));
-                    }
-                }
-                catch (e_5_1) { e_5 = { error: e_5_1 }; }
-                finally {
-                    try {
-                        if (self_5_1 && !self_5_1.done && (_a = self_5.return)) yield __await(_a.call(self_5));
-                    }
-                    finally { if (e_5) throw e_5.error; }
-                }
-            });
-        });
-    }
-    flatMap(mapper) {
-        const self = this;
-        return new AsyncStream(function () {
-            return __asyncGenerator(this, arguments, function* () {
-                var e_6, _a;
-                try {
-                    for (var self_6 = __asyncValues(self), self_6_1; self_6_1 = yield __await(self_6.next()), !self_6_1.done;) {
-                        const elem = self_6_1.value;
-                        yield __await(yield* __asyncDelegator(__asyncValues(mapper(elem))));
-                    }
-                }
-                catch (e_6_1) { e_6 = { error: e_6_1 }; }
-                finally {
-                    try {
-                        if (self_6_1 && !self_6_1.done && (_a = self_6.return)) yield __await(_a.call(self_6));
-                    }
-                    finally { if (e_6) throw e_6.error; }
-                }
-            });
-        });
-    }
-    filter(filter) {
-        const self = this;
-        return new AsyncStream(function () {
-            return __asyncGenerator(this, arguments, function* () {
-                var e_7, _a;
-                try {
-                    for (var self_7 = __asyncValues(self), self_7_1; self_7_1 = yield __await(self_7.next()), !self_7_1.done;) {
-                        const elem = self_7_1.value;
-                        if (filter(elem)) {
-                            yield yield __await(elem);
-                        }
-                    }
-                }
-                catch (e_7_1) { e_7 = { error: e_7_1 }; }
-                finally {
-                    try {
-                        if (self_7_1 && !self_7_1.done && (_a = self_7.return)) yield __await(_a.call(self_7));
-                    }
-                    finally { if (e_7) throw e_7.error; }
-                }
-            });
-        });
-    }
-    tap(effect) {
-        const self = this;
-        return new AsyncStream(function () {
-            return __asyncGenerator(this, arguments, function* () {
-                var e_8, _a;
-                try {
-                    for (var self_8 = __asyncValues(self), self_8_1; self_8_1 = yield __await(self_8.next()), !self_8_1.done;) {
-                        const elem = self_8_1.value;
-                        effect(elem);
-                        yield yield __await(elem);
-                    }
-                }
-                catch (e_8_1) { e_8 = { error: e_8_1 }; }
-                finally {
-                    try {
-                        if (self_8_1 && !self_8_1.done && (_a = self_8.return)) yield __await(_a.call(self_8));
-                    }
-                    finally { if (e_8) throw e_8.error; }
-                }
-            });
-        });
-    }
-    // Consumer
-    fold(initial, folder) {
-        var e_9, _a;
-        return __awaiter(this, void 0, void 0, function* () {
-            let acc = initial;
-            try {
-                for (var _b = __asyncValues(this.generator()), _c; _c = yield _b.next(), !_c.done;) {
-                    const elem = _c.value;
-                    acc = yield folder(elem, acc);
-                }
-            }
-            catch (e_9_1) { e_9 = { error: e_9_1 }; }
-            finally {
-                try {
-                    if (_c && !_c.done && (_a = _b.return)) yield _a.call(_b);
-                }
-                finally { if (e_9) throw e_9.error; }
-            }
-            return acc;
-        });
-    }
-    toArray() {
-        var e_10, _a;
-        return __awaiter(this, void 0, void 0, function* () {
-            const items = [];
-            try {
-                for (var _b = __asyncValues(this.generator()), _c; _c = yield _b.next(), !_c.done;) {
-                    const elem = _c.value;
-                    items.push(elem);
-                }
-            }
-            catch (e_10_1) { e_10 = { error: e_10_1 }; }
-            finally {
-                try {
-                    if (_c && !_c.done && (_a = _b.return)) yield _a.call(_b);
-                }
-                finally { if (e_10) throw e_10.error; }
-            }
-            return items;
-        });
-    }
-    forEach(func) {
-        var e_11, _a;
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                for (var _b = __asyncValues(this), _c; _c = yield _b.next(), !_c.done;) {
-                    const elem = _c.value;
-                    yield func(elem);
-                }
-            }
-            catch (e_11_1) { e_11 = { error: e_11_1 }; }
-            finally {
-                try {
-                    if (_c && !_c.done && (_a = _b.return)) yield _a.call(_b);
-                }
-                finally { if (e_11) throw e_11.error; }
-            }
-        });
-    }
-    [Symbol.asyncIterator]() {
-        return this.generator();
-    }
-}
-class Stream {
-    constructor(generator) {
-        this.generator = generator;
-    }
-    // Transformers
-    flatten() {
-        const self = this;
-        return new Stream(function* () {
-            for (const elem of self) {
-                if (Array.isArray(elem)) {
-                    yield* elem;
-                }
-                else {
-                    yield elem;
-                }
-            }
-        });
-    }
-    map(mapper) {
-        const self = this;
-        return new Stream(function* () {
-            for (const elem of self) {
-                yield mapper(elem);
-            }
-        });
-    }
-    flatMap(mapper) {
-        const self = this;
-        return new Stream(function* () {
-            for (const elem of self) {
-                yield* mapper(elem);
-            }
-        });
-    }
-    filter(filter) {
-        const self = this;
-        return new Stream(function* () {
-            for (const elem of self) {
-                if (filter(elem)) {
-                    yield elem;
-                }
-            }
-        });
-    }
-    tap(effect) {
-        const self = this;
-        return new Stream(function* () {
-            for (const elem of self) {
-                effect(elem);
-                yield elem;
-            }
-        });
-    }
-    // Consumer
-    take(n) {
-        const self = this;
-        let count = 0;
-        return new Stream(function* () {
-            for (const elem of self) {
-                if (count === n) {
-                    return;
-                }
-                count++;
-                yield elem;
-            }
-        });
-    }
-    drop(n) {
-        const self = this;
-        let count = 0;
-        return new Stream(function* () {
-            for (const elem of self) {
-                if (count++ < n) {
-                    continue;
-                }
-                yield elem;
-            }
-        });
-    }
-    takeUntil(test) {
-        const self = this;
-        return new Stream(function* () {
-            for (const elem of self) {
-                if (test(elem)) {
-                    return;
-                }
-                yield elem;
-            }
-        });
-    }
-    fold(initial, folder) {
-        let acc = initial;
-        for (const elem of this.generator()) {
-            acc = folder(elem, acc);
-        }
-        return acc;
-    }
-    toArray() {
-        const items = [];
-        for (const elem of this.generator()) {
-            items.push(elem);
-        }
-        return items;
-    }
-    forEach(func) {
-        for (const elem of this) {
-            func(elem);
-        }
-    }
-    // Lift to async
-    mapAsync(mapper) {
-        const self = this;
-        return new AsyncStream(function () {
-            return __asyncGenerator(this, arguments, function* () {
-                for (const elem of self) {
-                    yield yield __await(yield __await(mapper(elem)));
-                }
-            });
-        });
-    }
-    filterAsync(test) {
-        const self = this;
-        return new AsyncStream(function () {
-            return __asyncGenerator(this, arguments, function* () {
-                for (const elem of self) {
-                    if (yield __await(test(elem))) {
-                        yield yield __await(elem);
-                    }
-                }
-            });
-        });
-    }
-    foldAsync(initial, folder) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const self = this;
-            let acc = initial;
-            for (const elem of self) {
-                acc = yield folder(elem, acc);
-            }
-            return acc;
-        });
-    }
-    [Symbol.iterator]() {
-        return this.generator();
+        })();
     }
 }
 function delay(ms) {

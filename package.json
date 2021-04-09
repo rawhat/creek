@@ -5,7 +5,8 @@
   "main": "src/index.js",
   "scripts": {
     "build": "npx tsc --declaration",
-    "test": "jest"
+    "test": "jest",
+    "benchmark": "npx tsx && node src/benchmark.js"
   },
   "author": "Alex Manning",
   "license": "ISC",

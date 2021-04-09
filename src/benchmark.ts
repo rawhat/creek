@@ -15,25 +15,25 @@ async function benchmark<T>(label: string, fn: () => Promise<T>, log = false) {
 
 async function runBenchmarks() {
   await benchmark("array map", async () => {
-    const array = range(1, 10000);
+    const array = range(1, 10000000);
     const arrResult = array.map((n) => n * 2);
     return arrResult;
   });
 
   await benchmark("array filter", async () => {
-    const array = range(1, 10000);
+    const array = range(1, 10000000);
     const arrResult = array.filter((n) => n % 2 === 0);
     return arrResult;
   });
 
   await benchmark("array reduce", async () => {
-    const array = range(1, 10000);
+    const array = range(1, 10000000);
     const arrResult = array.reduce((a, b) => a + b, 0);
     return arrResult;
   });
 
   await benchmark("array combination", async () => {
-    const array = range(1, 10000);
+    const array = range(1, 10000000);
     const arrResult = array
       .map((n) => n * 2)
       .filter((n) => n % 2 === 0)
@@ -44,7 +44,7 @@ async function runBenchmarks() {
   });
 
   await benchmark("array async map", async () => {
-    const array = range(1, 10000);
+    const array = range(1, 100000);
     const arrResult = await Promise.all(array.map(async (n) => n * 2));
     return arrResult;
   });
@@ -52,7 +52,7 @@ async function runBenchmarks() {
   await benchmark("stream map", async () => {
     return stream
       .from(0)
-      .take(10000)
+      .take(10000000)
       .map((n) => n * 2)
       .toArray();
   });
@@ -60,7 +60,7 @@ async function runBenchmarks() {
   await benchmark("stream filter", async () => {
     return stream
       .from(1)
-      .take(10000)
+      .take(10000000)
       .filter((n) => n % 2 === 0)
       .toArray();
   });
@@ -68,14 +68,14 @@ async function runBenchmarks() {
   await benchmark("stream fold", async () => {
     return stream
       .from(1)
-      .take(10000)
+      .take(10000000)
       .fold(0, (a, b) => a + b);
   });
 
   await benchmark("stream combination", async () => {
     return stream
       .from(1)
-      .take(10000)
+      .take(10000000)
       .map((n) => n * 2)
       .filter((n) => n % 2 === 0)
       .map((n) => n / 2)
@@ -94,7 +94,7 @@ async function runBenchmarks() {
   await benchmark("stream async fold", async () => {
     return await stream
       .from(1)
-      .take(10000)
+      .take(100000)
       .foldAsync(0, async (a, b) => a + b);
   });
 }
