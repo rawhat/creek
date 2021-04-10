@@ -21,6 +21,25 @@ export class Stream<T, R> {
 
   // Transformers
 
+  transform<V, M>(
+    initial: V,
+    transformer: (value: T, accumulator: V) => [M, V] | undefined
+  ) {
+    let accumulator = initial;
+    const wrappedMapper = (entry: StreamEntry<T>): StreamResult<M> => {
+      if (entry.type === "skip") {
+        return entry;
+      }
+      const next = transformer(entry.value, accumulator);
+      if (!next) {
+        return { type: "halt" };
+      }
+      accumulator = next[1];
+      return { type: "value", value: next[0] };
+    };
+    return new Stream(this.generator, this.transforms.concat(wrappedMapper));
+  }
+
   map<V>(mapper: (value: T) => V): Stream<T, V> {
     const wrappedMapper = (entry: StreamEntry<T>): StreamEntry<V> => {
       if (entry.type === "skip") {
@@ -126,7 +145,7 @@ export class Stream<T, R> {
       for (const two of other) {
         yield two;
       }
-    })
+    });
   }
 
   // Consumers
@@ -134,7 +153,7 @@ export class Stream<T, R> {
   toArray(): R[] {
     let results: R[] = [];
     for (const elem of this.generator()) {
-      const result = this.transform(elem);
+      const result = this.applyTransforms(elem);
       if (result.type === "value") {
         results.push(result.value);
       } else if (result.type === "flatten") {
@@ -155,7 +174,7 @@ export class Stream<T, R> {
   fold<V>(initial: V, reducer: (next: R, accumulator: V) => V) {
     let accumulator = initial;
     for (const elem of this.generator()) {
-      const result = this.transform(elem);
+      const result = this.applyTransforms(elem);
       if (result.type === "value") {
         accumulator = reducer(result.value, accumulator);
       } else if (result.type === "flatten") {
@@ -178,7 +197,7 @@ export class Stream<T, R> {
 
   forEach(effect: (value: R) => void) {
     for (const elem of this.generator()) {
-      const result = this.transform(elem);
+      const result = this.applyTransforms(elem);
       if (result.type === "halt") {
         return;
       }
@@ -188,7 +207,7 @@ export class Stream<T, R> {
     }
   }
 
-  private transform(value: T): StreamResult<R> {
+  private applyTransforms(value: T): StreamResult<R> {
     let acc = { type: "value", value };
     for (const transform of this.transforms) {
       if (acc.type === "halt") {
@@ -245,7 +264,7 @@ export class Stream<T, R> {
     const self = this;
     return (function* () {
       for (const elem of self.generator()) {
-        const result = self.transform(elem);
+        const result = self.applyTransforms(elem);
         if (result.type === "halt") {
           return;
         }

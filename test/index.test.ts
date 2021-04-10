@@ -19,6 +19,20 @@ describe("Stream", () => {
     expect(arr).toStrictEqual([4, 5, 6]);
   });
 
+  it("should transform stream values", () => {
+    const arr = stream
+      .from(1)
+      .transform(null, (n, acc) => {
+        if (n * 2 === 6) {
+          return;
+        }
+        return [n, acc];
+      })
+      .toArray();
+
+    expect(arr).toStrictEqual([1, 2]);
+  });
+
   it("should take until some boolean test", () => {
     const arr = stream
       .from(1)
@@ -151,5 +165,65 @@ describe("Stream", () => {
       .toArray();
 
     expect(result).toStrictEqual([4, 8, 12, 16, 20, 24]);
+  });
+
+  it("should allow transformations of async streams", async () => {
+    const arr = await stream
+      .fromArray([1, 2, 3])
+      .mapAsync(async (n) => n * 2)
+      .transform(1, async (n, acc) => {
+        if (acc > 2) {
+          return;
+        }
+        return [n, acc + 1];
+      })
+      .toArray();
+
+    expect(arr).toStrictEqual([2, 4]);
+  });
+
+  it("should combine async streams", async () => {
+    const s1 = stream.fromArray([1, 2, 3]).mapAsync(async (n) => n * 2);
+    const s2 = stream.fromArray(["a", "b", "c"]).mapAsync(async (n) => `_${n}`);
+    const s3 = stream.fromArray([true, true, true]).mapAsync(async (n) => n);
+    const result = await s1.combine(s2, s3).toArray();
+
+    expect(result).toStrictEqual([2, "_a", true, 4, "_b", true, 6, "_c", true]);
+  });
+
+  it("should zip with combine", async () => {
+    const s1 = stream.fromArray([1, 2, 3]).mapAsync(async (n) => n * 2);
+    const s2 = stream.fromArray(["a", "b", "c"]).mapAsync(async (n) => `_${n}`);
+    const s3 = stream.fromArray([true, true, true]).mapAsync(async (n) => n);
+    const res = await s1.combine(s2).combine(s3).toArray();
+
+    expect(res).toStrictEqual([true, 2, true, "_a", true, 4, "_b", 6, "_c"]);
+  });
+
+  it("should handle combining with intervals", async () => {
+    // emit `one {index}` every 10ms
+    const s1 = stream
+      .interval(10)
+      .take(6)
+      .withIndex()
+      .map(async ([_num, index]) => `one ${index}`);
+    // emit `two {index}` every 30ms
+    const s2 = stream
+      .interval(30)
+      .take(2)
+      .withIndex()
+      .map(async ([_num, index]) => `two ${index}`);
+    const res = await s1.combine(s2).toArray();
+
+    expect(res).toStrictEqual([
+      "one 0",
+      "one 1",
+      "two 0",
+      "one 2",
+      "one 3",
+      "one 4",
+      "two 1",
+      "one 5",
+    ]);
   });
 });
