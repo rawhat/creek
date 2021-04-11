@@ -4,11 +4,11 @@
   "description": "Lazy lists for TypeScript and JavaScript",
   "main": "dist/index.js",
   "scripts": {
-    "build": "npx parcel build src/index.ts",
-    "check": "npx tsc --noEmit",
+    "build": "parcel build src/index.ts",
+    "check": "tsc --noEmit",
     "test": "jest",
-    "benchmark": "npx ts-node src/benchmark.ts",
-    "prettier": "npx prettier -w src/**.*"
+    "benchmark": "ts-node src/benchmark.ts",
+    "prettier": "prettier -w src/**.*"
   },
   "author": "Alex Manning",
   "license": "ISC",
