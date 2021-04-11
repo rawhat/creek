@@ -399,20 +399,6 @@ export class AsyncStream<T, R> {
     }
   }
 
-  private async applyTransforms(value: T): Promise<AsyncStreamResult<R>> {
-    let acc = { type: "value", value };
-    for (const transform of this.transforms) {
-      if (acc.type === "halt") {
-        return acc as AsyncStreamResult<R>;
-      }
-      if (acc.type === "skip") {
-        continue;
-      }
-      acc = await transform(acc);
-    }
-    return acc as AsyncStreamResult<R>;
-  }
-
   [Symbol.asyncIterator]() {
     const self = this;
     return (async function* () {
@@ -426,5 +412,19 @@ export class AsyncStream<T, R> {
         }
       }
     })();
+  }
+
+  private async applyTransforms(value: T): Promise<AsyncStreamResult<R>> {
+    let acc = { type: "value", value };
+    for (const transform of this.transforms) {
+      if (acc.type === "halt") {
+        return acc as AsyncStreamResult<R>;
+      }
+      if (acc.type === "skip") {
+        continue;
+      }
+      acc = await transform(acc);
+    }
+    return acc as AsyncStreamResult<R>;
   }
 }

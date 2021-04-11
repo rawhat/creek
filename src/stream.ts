@@ -1,4 +1,4 @@
-import { AsyncStream, AsyncStreamEntry } from "./asyncStream";
+import { AsyncStream } from "./asyncStream";
 
 export type StreamEntry<T> =
   | { type: "skip" }
@@ -130,113 +130,50 @@ export class Stream<T, R> {
   // Consumers
 
   toArray(): R[] {
-    let results: R[] = [];
-    for (const elem of this.generator()) {
-      const result = this.applyTransforms(elem);
-      if (result.type === "value") {
-        results.push(result.value);
-      } else if (result.type === "flatten") {
-        if (Array.isArray(result.value)) {
-          results.push(...result.value);
-        } else {
-          results.push(result.value);
-        }
-      } else if (result.type === "halt") {
-        break;
-      } else {
-        continue;
-      }
-    }
-    return results;
+    return [...this[Symbol.iterator]()];
   }
 
   fold<V>(initial: V, reducer: (next: R, accumulator: V) => V) {
     let accumulator = initial;
-    for (const elem of this.generator()) {
-      const result = this.applyTransforms(elem);
-      if (result.type === "value") {
-        accumulator = reducer(result.value, accumulator);
-      } else if (result.type === "flatten") {
-        if (Array.isArray(result.value)) {
-          accumulator = result.value.reduce(
-            (v, acc) => reducer(v, acc),
-            accumulator
-          );
-        } else {
-          accumulator = reducer(result.value, accumulator);
-        }
-      } else if (result.type === "halt") {
-        return accumulator;
-      } else {
-        continue;
-      }
+    for (const elem of this) {
+      accumulator = reducer(elem, accumulator);
     }
     return accumulator;
   }
 
   forEach(effect: (value: R) => void) {
-    for (const elem of this.generator()) {
-      const result = this.applyTransforms(elem);
-      if (result.type === "halt") {
-        return;
-      }
-      if (result.type === "value") {
-        effect(result.value);
-      }
+    for (const elem of this) {
+      effect(elem);
     }
-  }
-
-  private applyTransforms(value: T): StreamResult<R> {
-    let acc = { type: "value", value };
-    for (const transform of this.transforms) {
-      if (acc.type === "halt") {
-        return acc as StreamEntry<R>;
-      }
-      if (acc.type === "skip") {
-        continue;
-      }
-      acc = transform(acc);
-    }
-    return acc as StreamEntry<R>;
   }
 
   // Lift to async
 
-  mapAsync<R>(mapper: (value: T) => Promise<R>) {
-    const wrappedMapper = async (
-      entry: AsyncStreamEntry<T>
-    ): Promise<AsyncStreamEntry<R>> => {
-      if (entry.type === "skip") {
-        return entry;
-      }
-      return { type: "value", value: mapper(await entry.value) };
-    };
+  mapAsync<V>(mapper: (value: R) => Promise<V>) {
     const self = this;
-    return new AsyncStream<T, R>(async function* () {
+    return new AsyncStream<R, R>(async function* () {
       for await (const elem of self) {
-        yield (elem as unknown) as T;
+        yield elem;
       }
-    }, this.transforms.concat(wrappedMapper));
+    }).map(mapper);
   }
 
   filterAsync(predicate: (value: R) => Promise<boolean>) {
     const self = this;
-    const newStream = new AsyncStream<R, R>(async function* () {
+    return new AsyncStream<R, R>(async function* () {
       for (const elem of self) {
         yield elem;
       }
-    }, this.transforms);
-    return newStream.filter(predicate);
+    }).filter(predicate);
   }
 
   foldAsync<V>(initial: V, reducer: (next: R, acc: V) => Promise<V>) {
     const self = this;
-    const newStream = new AsyncStream<R, R>(async function* () {
+    return new AsyncStream<R, R>(async function* () {
       for (const elem of self) {
         yield elem;
       }
-    }, this.transforms);
-    return newStream.fold<V>(initial, reducer);
+    }, this.transforms).fold<V>(initial, reducer);
   }
 
   [Symbol.iterator]() {
@@ -247,10 +184,31 @@ export class Stream<T, R> {
         if (result.type === "halt") {
           return;
         }
+        if (result.type === "flatten") {
+          if (Array.isArray(result.value)) {
+            yield* result.value;
+          } else {
+            yield result.value;
+          }
+        }
         if (result.type === "value") {
           yield result.value;
         }
       }
     })();
+  }
+
+  private applyTransforms(value: T): StreamResult<R> {
+    let acc = { type: "value", value };
+    for (const transform of this.transforms) {
+      if (acc.type === "halt") {
+        return acc as StreamResult<R>;
+      }
+      if (acc.type === "skip") {
+        continue;
+      }
+      acc = transform(acc);
+    }
+    return acc as StreamResult<R>;
   }
 }
