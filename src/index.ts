@@ -57,8 +57,8 @@ export function interval(n: number) {
   let count = 0;
   return new AsyncStream<number, number>(async function* () {
     while (true) {
-      await delay(n);
       yield count++;
+      await delay(n);
     }
   });
 }

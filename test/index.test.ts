@@ -210,20 +210,21 @@ describe("Stream", () => {
     // emit `two {index}` every 30ms
     const s2 = stream
       .interval(30)
-      .take(2)
+      .take(3)
       .withIndex()
       .map(async ([_num, index]) => `two ${index}`);
     const res = await s1.combine(s2).toArray();
 
     expect(res).toStrictEqual([
-      "one 0",
-      "one 1",
-      "two 0",
-      "one 2",
-      "one 3",
-      "one 4",
-      "two 1",
-      "one 5",
+      "one 0", // 0ms
+      "two 0", // 0ms
+      "one 1", // 10ms
+      "one 2", // 20ms
+      "two 1", // 30ms
+      "one 3", // 30ms
+      "one 4", // 40ms
+      "one 5", // 50ms
+      "two 2", // 60ms
     ]);
   });
 });

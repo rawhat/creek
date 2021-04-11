@@ -5,6 +5,7 @@
   "main": "src/index.js",
   "scripts": {
     "build": "npx parcel build src/index.ts",
+    "check": "npx tsc --noEmit",
     "test": "jest",
     "benchmark": "npx ts-node src/benchmark.ts",
     "prettier": "npx prettier -w ."

@@ -21,12 +21,15 @@ export class Stream<T, R> {
 
   // Transformers
 
-  transform<V, M>(
+  transform<V, N>(
     initial: V,
-    transformer: (value: T, accumulator: V) => [M, V] | undefined
+    transformer: (
+      value: R,
+      accumulator: V
+    ) => [N, V] | [{ flatten: N }, V] | [V] | undefined
   ) {
     let accumulator = initial;
-    const wrappedMapper = (entry: StreamEntry<T>): StreamResult<M> => {
+    const wrappedMapper = (entry: StreamEntry<R>): StreamResult<N> => {
       if (entry.type === "skip") {
         return entry;
       }
@@ -34,106 +37,82 @@ export class Stream<T, R> {
       if (!next) {
         return { type: "halt" };
       }
-      accumulator = next[1];
-      return { type: "value", value: next[0] };
-    };
-    return new Stream(this.generator, this.transforms.concat(wrappedMapper));
-  }
-
-  map<V>(mapper: (value: T) => V): Stream<T, V> {
-    const wrappedMapper = (entry: StreamEntry<T>): StreamEntry<V> => {
-      if (entry.type === "skip") {
-        return entry;
-      }
-      return { type: "value", value: mapper(entry.value) };
-    };
-    return new Stream(this.generator, this.transforms.concat(wrappedMapper));
-  }
-
-  filter(predicate: (value: T) => boolean): Stream<T, R> {
-    const wrappedFilter = (entry: StreamEntry<T>): StreamEntry<T> => {
-      if (entry.type === "skip") {
-        return entry;
-      }
-      if (!predicate(entry.value)) {
+      if (next.length === 1) {
+        accumulator = next[0];
         return { type: "skip" };
       }
-      return entry;
+      accumulator = next[1];
+      if (typeof next[0] === "object" && "flatten" in next[0]) {
+        return { type: "flatten", value: next[0].flatten };
+      } else {
+        return { type: "value", value: next[0] };
+      }
     };
-    return new Stream(this.generator, this.transforms.concat(wrappedFilter));
+    return new Stream<T, N>(
+      this.generator,
+      this.transforms.concat(wrappedMapper)
+    );
   }
 
-  flatMap<V>(mapper: (value: T) => V) {
-    const wrapped = (entry: StreamEntry<T>): StreamEntry<V> => {
-      if (entry.type === "skip") {
-        return entry;
+  map<V>(mapper: (entry: R) => V): Stream<T, V> {
+    return this.transform(undefined, (entry, acc) => {
+      return [mapper(entry), acc];
+    });
+  }
+
+  filter(predicate: (entry: R) => boolean): Stream<T, R> {
+    return this.transform(undefined, (entry, acc) => {
+      if (!predicate(entry)) {
+        return [acc];
       }
-      return { type: "flatten", value: mapper(entry.value) };
-    };
-    return new Stream<T, V>(this.generator, this.transforms.concat(wrapped));
+      return [entry, acc];
+    });
+  }
+
+  flatMap<V>(mapper: (entry: R) => V) {
+    return this.transform(undefined, (entry, acc) => {
+      return [{ flatten: mapper(entry) }, acc];
+    });
   }
 
   take(n: number): Stream<T, R> {
-    let count = 0;
-    const wrapper = (entry: StreamEntry<T>) => {
-      if (entry.type === "skip") {
-        return entry;
+    return this.transform(0, (entry, acc) => {
+      if (acc >= n) {
+        return;
       }
-      if (count === n) {
-        return { type: "halt" };
-      }
-      count++;
-      return { type: "value", value: entry.value };
-    };
-    return new Stream(this.generator, this.transforms.concat(wrapper));
+      return [entry, acc + 1];
+    });
   }
 
-  takeUntil(predicate: (value: T) => boolean) {
-    const wrapper = (entry: StreamEntry<T>) => {
-      if (entry.type === "skip") {
-        return entry;
+  takeUntil(predicate: (entry: R) => boolean) {
+    return this.transform(undefined, (entry, acc) => {
+      if (predicate(entry)) {
+        return;
       }
-      if (predicate(entry.value)) {
-        return { type: "halt" };
-      }
-      return entry;
-    };
-    return new Stream<T, T>(this.generator, this.transforms.concat(wrapper));
+      return [entry, acc];
+    });
   }
 
   drop(n: number) {
-    let count = 0;
-    const wrapper = (entry: StreamEntry<T>) => {
-      if (entry.type === "skip") {
-        return entry;
+    return this.transform(0, (entry, acc) => {
+      if (acc < n) {
+        return [acc + 1];
       }
-      if (entry.type === "value" && count < n) {
-        count++;
-        return { type: "skip" };
-      }
-      return entry;
-    };
-    return new Stream<T, T>(this.generator, this.transforms.concat(wrapper));
+      return [entry, acc];
+    });
   }
 
   flatten() {
-    const wrapper = (entry: StreamEntry<T>): StreamEntry<T> => {
-      if (entry.type === "skip") {
-        return entry;
-      }
-      return { type: "flatten", value: entry.value };
-    };
-    return new Stream<T, R>(this.generator, this.transforms.concat(wrapper));
+    return this.transform(undefined, (entry, acc) => {
+      return [{ flatten: entry }, acc];
+    });
   }
 
-  tap(effect: (value: T) => void) {
-    const wrapper = (entry: StreamEntry<T>): StreamEntry<T> => {
-      if (entry.type === "value") {
-        effect(entry.value);
-      }
-      return entry;
-    };
-    return new Stream<T, T>(this.generator, this.transforms.concat(wrapper));
+  tap(effect: (value: R) => void) {
+    return this.transform(undefined, (entry, acc) => {
+      effect(entry);
+      return [entry, acc];
+    });
   }
 
   concat<V>(other: Stream<V, V>): Stream<R | V, R | V> {

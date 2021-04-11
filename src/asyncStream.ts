@@ -24,7 +24,10 @@ export class AsyncStream<T, R> {
 
   transform<V, N>(
     initial: V,
-    transformer: (next: R, accumulator: V) => Promise<[N, V] | undefined>
+    transformer: (
+      next: R,
+      accumulator: V
+    ) => Promise<[N, V] | [{ flatten: N }, V] | [V] | undefined>
   ) {
     let accumulator = initial;
     const wrappedMapper = async (
@@ -37,147 +40,85 @@ export class AsyncStream<T, R> {
       if (!ret) {
         return { type: "halt" };
       }
-      accumulator = ret[1];
-      return { type: "value", value: ret[0] };
-    };
-
-    return new AsyncStream(
-      this.generator,
-      this.transforms.concat(wrappedMapper)
-    );
-  }
-
-  map<V>(mapper: (value: R) => Promise<V>): AsyncStream<T, V> {
-    const wrappedMapper = async (
-      entry: AsyncStreamEntry<R>
-    ): Promise<AsyncStreamEntry<V>> => {
-      if (entry.type === "skip") {
-        return entry;
-      }
-      return { type: "value", value: mapper(await entry.value) };
-    };
-    return new AsyncStream(
-      this.generator,
-      this.transforms.concat(wrappedMapper)
-    );
-  }
-
-  filter(predicate: (value: R) => Promise<boolean>): AsyncStream<T, T> {
-    const wrappedFilter = async (
-      entry: AsyncStreamEntry<R>
-    ): Promise<AsyncStreamEntry<R>> => {
-      if (entry.type === "skip") {
-        return entry;
-      }
-      if (!(await predicate(await entry.value))) {
+      if (ret.length === 1) {
+        accumulator = ret[0];
         return { type: "skip" };
       }
-      return entry;
+      accumulator = ret[1];
+      if (typeof ret[0] === "object" && "flatten" in ret[0]) {
+        return { type: "flatten", value: ret[0].flatten };
+      } else {
+        return { type: "value", value: ret[0] };
+      }
     };
-    return new AsyncStream(
+
+    return new AsyncStream<T, N>(
       this.generator,
-      this.transforms.concat(wrappedFilter)
+      this.transforms.concat(wrappedMapper)
     );
   }
 
-  flatMap<V>(mapper: (value: R) => Promise<V>) {
-    const wrapped = async (
-      entry: AsyncStreamEntry<R>
-    ): Promise<AsyncStreamEntry<V>> => {
-      if (entry.type === "skip") {
-        return entry;
+  map<V>(mapper: (entry: R) => Promise<V>): AsyncStream<T, V> {
+    return this.transform(undefined, async (entry, acc) => [
+      await mapper(entry),
+      acc,
+    ]);
+  }
+
+  filter(predicate: (entry: R) => Promise<boolean>): AsyncStream<T, R> {
+    return this.transform(undefined, async (entry, acc) => {
+      if (!(await predicate(entry))) {
+        return [acc];
       }
-      return { type: "flatten", value: mapper(await entry.value) };
-    };
-    return new AsyncStream<T, V>(
-      this.generator,
-      this.transforms.concat(wrapped)
-    );
+      return [entry, acc];
+    });
+  }
+
+  flatMap<V>(mapper: (entry: R) => Promise<V>): AsyncStream<T, V> {
+    return this.transform<undefined, V>(undefined, async (entry, acc) => [
+      { flatten: await mapper(entry) },
+      acc,
+    ]);
   }
 
   take(n: number): AsyncStream<T, R> {
-    let count = 0;
-    const wrapper = async (
-      entry: AsyncStreamEntry<R>
-    ): Promise<AsyncStreamResult<R>> => {
-      if (entry.type === "skip") {
-        return entry;
+    return this.transform(0, async (entry, acc) => {
+      if (acc >= n) {
+        return;
       }
-      if (count === n) {
-        return { type: "halt" };
-      }
-      count++;
-      return { type: "value", value: entry.value };
-    };
-    return new AsyncStream(this.generator, this.transforms.concat(wrapper));
+      return [entry, acc + 1];
+    });
   }
 
-  takeUntil(predicate: (value: R) => Promise<boolean>) {
-    const wrapper = async (
-      entry: AsyncStreamEntry<R>
-    ): Promise<AsyncStreamResult<R>> => {
-      if (entry.type === "skip") {
-        return entry;
+  takeUntil(predicate: (entry: R) => Promise<boolean>) {
+    return this.transform(undefined, async (entry, acc) => {
+      if (await predicate(entry)) {
+        return;
       }
-      if (await predicate(await entry.value)) {
-        return { type: "halt" };
-      }
-      return entry;
-    };
-    return new AsyncStream<T, R>(
-      this.generator,
-      this.transforms.concat(wrapper)
-    );
+      return [entry, acc];
+    });
   }
 
   drop(n: number) {
-    let count = 0;
-    const wrapper = async (
-      entry: AsyncStreamEntry<R>
-    ): Promise<AsyncStreamResult<R>> => {
-      if (entry.type === "skip") {
-        return entry;
+    return this.transform(0, async (entry, acc) => {
+      if (acc > n) {
+        return [entry, acc];
       }
-      if (entry.type === "value" && count < n) {
-        count++;
-        return { type: "skip" };
-      }
-      return entry;
-    };
-    return new AsyncStream<T, R>(
-      this.generator,
-      this.transforms.concat(wrapper)
-    );
+      return [acc + 1];
+    });
   }
 
   flatten() {
-    const wrapper = async (
-      entry: AsyncStreamEntry<R>
-    ): Promise<AsyncStreamEntry<R>> => {
-      if (entry.type === "skip") {
-        return entry;
-      }
-      return { type: "flatten", value: entry.value };
-    };
-    return new AsyncStream<T, R>(
-      this.generator,
-      this.transforms.concat(wrapper)
-    );
+    return this.transform(undefined, async (entry, acc) => {
+      return [{ flatten: entry }, acc];
+    });
   }
 
   tap(effect: (value: R) => Promise<void>) {
-    const wrapper = async (
-      entry: AsyncStreamEntry<R>
-    ): Promise<AsyncStreamResult<R>> => {
-      if (entry.type === "value") {
-        effect(await entry.value);
-      }
-      return entry;
-    };
-    return new AsyncStream<T, R>(
-      this.generator,
-      this.transforms.concat(wrapper)
-    );
+    return this.transform(undefined, async (entry, acc) => {
+      effect(entry);
+      return [entry, acc];
+    });
   }
 
   concat<T1, R1>(other: AsyncStream<T1, R1>): AsyncStream<R | R1, R | R1> {
@@ -193,19 +134,9 @@ export class AsyncStream<T, R> {
   }
 
   withIndex(): AsyncStream<T, [R, number]> {
-    let index = 0;
-    const wrappedMapper = async (
-      entry: AsyncStreamEntry<R>
-    ): Promise<AsyncStreamResult<[R, number]>> => {
-      if (entry.type === "skip") {
-        return entry;
-      }
-      return { type: "value", value: [await entry.value, index++] };
-    };
-    return new AsyncStream(
-      this.generator,
-      this.transforms.concat(wrappedMapper)
-    );
+    return this.transform(0, async (entry, acc) => {
+      return [[entry, acc], acc + 1];
+    });
   }
 
   combine<T1, R1>(a: AsyncStream<T1, R1>): AsyncStream<T | T1, R | R1>;
