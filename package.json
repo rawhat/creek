@@ -4,9 +4,9 @@
   "description": "Lazy lists for TypeScript and JavaScript",
   "main": "src/index.js",
   "scripts": {
-    "build": "npx tsc --declaration",
+    "build": "npx parcel build src/index.ts",
     "test": "jest",
-    "benchmark": "npx tsx && node src/benchmark.js",
+    "benchmark": "npx ts-node src/benchmark.ts",
     "prettier": "npx prettier -w ."
   },
   "author": "Alex Manning",
@@ -19,5 +19,8 @@
     "ts-jest": "^27.0.0-next.10",
     "ts-node": "^9.1.1",
     "typescript": "^4.2.3"
+  },
+  "dependencies": {
+    "parcel-bundler": "^1.12.5"
   }
 }
