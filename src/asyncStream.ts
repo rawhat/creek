@@ -139,6 +139,138 @@ export class AsyncStream<T, R> {
     });
   }
 
+  debounce(duration: number) {
+    return this.transform(-1, async (entry, previous) => {
+      const now = Date.now();
+      if (now - previous < duration) {
+        return [previous];
+      }
+      return [entry, now];
+    });
+  }
+
+  zip<T1, R1>(a: AsyncStream<T1, R1>): AsyncStream<T | T1, (R | R1)[]>;
+  zip<T1, R1, T2, R2>(
+    a: AsyncStream<T1, R1>,
+    b: AsyncStream<T2, R2>
+  ): AsyncStream<T | T1 | T2, (R | R1 | R2)[]>;
+  zip<T1, R1, T2, R2, T3, R3>(
+    a: AsyncStream<T1, R1>,
+    b: AsyncStream<T2, R2>,
+    c: AsyncStream<T3, R3>
+  ): AsyncStream<T | T1 | T2 | T3, (R | R1 | R2 | R3)[]>;
+  zip<T1, R1, T2, R2, T3, R3, T4, R4>(
+    a: AsyncStream<T1, R1>,
+    b: AsyncStream<T2, R2>,
+    c: AsyncStream<T3, R3>,
+    d: AsyncStream<T4, R4>
+  ): AsyncStream<T | T1 | T2 | T3 | T4, (R | R1 | R2 | R3 | R4)[]>;
+  zip<T1, R1, T2, R2, T3, R3, T4, R4, T5, R5>(
+    a: AsyncStream<T1, R1>,
+    b: AsyncStream<T2, R2>,
+    c: AsyncStream<T3, R3>,
+    d: AsyncStream<T4, R4>,
+    e: AsyncStream<T5, R5>
+  ): AsyncStream<T | T1 | T2 | T3 | T4 | T5, (R | R1 | R2 | R3 | R4 | R5)[]>;
+  zip<T1, R1, T2, R2, T3, R3, T4, R4, T5, R5, T6, R6>(
+    a: AsyncStream<T1, R1>,
+    b: AsyncStream<T2, R2>,
+    c: AsyncStream<T3, R3>,
+    d: AsyncStream<T4, R4>,
+    e: AsyncStream<T5, R5>,
+    f: AsyncStream<T6, R6>
+  ): AsyncStream<
+    T | T1 | T2 | T3 | T4 | T5 | T6,
+    (R | R1 | R2 | R3 | R4 | R5 | R6)[]
+  >;
+  zip<T1, R1, T2, R2, T3, R3, T4, R4, T5, R5, T6, R6, T7, R7>(
+    a: AsyncStream<T1, R1>,
+    b: AsyncStream<T2, R2>,
+    c: AsyncStream<T3, R3>,
+    d: AsyncStream<T4, R4>,
+    e: AsyncStream<T5, R5>,
+    f: AsyncStream<T6, R6>,
+    g: AsyncStream<T7, R7>
+  ): AsyncStream<
+    T | T1 | T2 | T3 | T4 | T5 | T6 | T7,
+    (R | R1 | R2 | R3 | R4 | R5 | R6 | R7)[]
+  >;
+  zip<T1, R1, T2, R2, T3, R3, T4, R4, T5, R5, T6, R6, T7, R7, T8, R8>(
+    a: AsyncStream<T1, R1>,
+    b: AsyncStream<T2, R2>,
+    c: AsyncStream<T3, R3>,
+    d: AsyncStream<T4, R4>,
+    e: AsyncStream<T5, R5>,
+    f: AsyncStream<T6, R6>,
+    g: AsyncStream<T7, R7>,
+    h: AsyncStream<T8, R8>
+  ): AsyncStream<
+    T | T1 | T2 | T3 | T4 | T5 | T6 | T7 | T8,
+    (R | R1 | R2 | R3 | R4 | R5 | R6 | R7 | R8)[]
+  >;
+  zip<T1, R1, T2, R2, T3, R3, T4, R4, T5, R5, T6, R6, T7, R7, T8, R8, T9, R9>(
+    a: AsyncStream<T1, R1>,
+    b: AsyncStream<T2, R2>,
+    c: AsyncStream<T3, R3>,
+    d: AsyncStream<T4, R4>,
+    e: AsyncStream<T5, R5>,
+    f: AsyncStream<T6, R6>,
+    g: AsyncStream<T7, R7>,
+    h: AsyncStream<T8, R8>,
+    i: AsyncStream<T9, R9>
+  ): AsyncStream<
+    T | T1 | T2 | T3 | T4 | T5 | T6 | T7 | T8 | T9,
+    (R | R1 | R2 | R3 | R4 | R5 | R6 | R7 | R8 | R9)[]
+  >;
+  zip<
+    T1,
+    R1,
+    T2,
+    R2,
+    T3,
+    R3,
+    T4,
+    R4,
+    T5,
+    R5,
+    T6,
+    R6,
+    T7,
+    R7,
+    T8,
+    R8,
+    T9,
+    R9,
+    T10,
+    R10
+  >(
+    a: AsyncStream<T1, R1>,
+    b: AsyncStream<T2, R2>,
+    c: AsyncStream<T3, R3>,
+    d: AsyncStream<T4, R4>,
+    e: AsyncStream<T5, R5>,
+    f: AsyncStream<T6, R6>,
+    g: AsyncStream<T7, R7>,
+    h: AsyncStream<T8, R8>,
+    i: AsyncStream<T9, R9>,
+    j: AsyncStream<T10, R10>
+  ): AsyncStream<
+    T | T1 | T2 | T3 | T4 | T5 | T6 | T7 | T8 | T9 | T10,
+    (R | R1 | R2 | R3 | R4 | R5 | R6 | R7 | R8 | R9 | R10)[]
+  >;
+  zip(...others: AsyncStream<any, any>[]) {
+    const accumulator = others.map((other) => other[Symbol.asyncIterator]());
+    return this.transform(accumulator, async (entry, acc) => {
+      const nextValues = (await Promise.all(acc.map((next) => next.next())))
+        .filter((n) => !n.done)
+        .map((n) => n.value);
+      if (nextValues.length !== acc.length) {
+        return;
+      }
+      return [[entry, ...nextValues], acc];
+    });
+  }
+
   combine<T1, R1>(a: AsyncStream<T1, R1>): AsyncStream<T | T1, R | R1>;
   combine<T1, R1, T2, R2>(
     a: AsyncStream<T1, R1>,

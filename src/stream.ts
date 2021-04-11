@@ -127,6 +127,129 @@ export class Stream<T, R> {
     });
   }
 
+  zip<T1, R1>(a: Stream<T1, R1>): Stream<T | T1, (R | R1)[]>;
+  zip<T1, R1, T2, R2>(
+    a: Stream<T1, R1>,
+    b: Stream<T2, R2>
+  ): Stream<T | T1 | T2, (R | R1 | R2)[]>;
+  zip<T1, R1, T2, R2, T3, R3>(
+    a: Stream<T1, R1>,
+    b: Stream<T2, R2>,
+    c: Stream<T3, R3>
+  ): Stream<T | T1 | T2 | T3, (R | R1 | R2 | R3)[]>;
+  zip<T1, R1, T2, R2, T3, R3, T4, R4>(
+    a: Stream<T1, R1>,
+    b: Stream<T2, R2>,
+    c: Stream<T3, R3>,
+    d: Stream<T4, R4>
+  ): Stream<T | T1 | T2 | T3 | T4, (R | R1 | R2 | R3 | R4)[]>;
+  zip<T1, R1, T2, R2, T3, R3, T4, R4, T5, R5>(
+    a: Stream<T1, R1>,
+    b: Stream<T2, R2>,
+    c: Stream<T3, R3>,
+    d: Stream<T4, R4>,
+    e: Stream<T5, R5>
+  ): Stream<T | T1 | T2 | T3 | T4 | T5, (R | R1 | R2 | R3 | R4 | R5)[]>;
+  zip<T1, R1, T2, R2, T3, R3, T4, R4, T5, R5, T6, R6>(
+    a: Stream<T1, R1>,
+    b: Stream<T2, R2>,
+    c: Stream<T3, R3>,
+    d: Stream<T4, R4>,
+    e: Stream<T5, R5>,
+    f: Stream<T6, R6>
+  ): Stream<
+    T | T1 | T2 | T3 | T4 | T5 | T6,
+    (R | R1 | R2 | R3 | R4 | R5 | R6)[]
+  >;
+  zip<T1, R1, T2, R2, T3, R3, T4, R4, T5, R5, T6, R6, T7, R7>(
+    a: Stream<T1, R1>,
+    b: Stream<T2, R2>,
+    c: Stream<T3, R3>,
+    d: Stream<T4, R4>,
+    e: Stream<T5, R5>,
+    f: Stream<T6, R6>,
+    g: Stream<T7, R7>
+  ): Stream<
+    T | T1 | T2 | T3 | T4 | T5 | T6 | T7,
+    (R | R1 | R2 | R3 | R4 | R5 | R6 | R7)[]
+  >;
+  zip<T1, R1, T2, R2, T3, R3, T4, R4, T5, R5, T6, R6, T7, R7, T8, R8>(
+    a: Stream<T1, R1>,
+    b: Stream<T2, R2>,
+    c: Stream<T3, R3>,
+    d: Stream<T4, R4>,
+    e: Stream<T5, R5>,
+    f: Stream<T6, R6>,
+    g: Stream<T7, R7>,
+    h: Stream<T8, R8>
+  ): Stream<
+    T | T1 | T2 | T3 | T4 | T5 | T6 | T7 | T8,
+    (R | R1 | R2 | R3 | R4 | R5 | R6 | R7 | R8)[]
+  >;
+  zip<T1, R1, T2, R2, T3, R3, T4, R4, T5, R5, T6, R6, T7, R7, T8, R8, T9, R9>(
+    a: Stream<T1, R1>,
+    b: Stream<T2, R2>,
+    c: Stream<T3, R3>,
+    d: Stream<T4, R4>,
+    e: Stream<T5, R5>,
+    f: Stream<T6, R6>,
+    g: Stream<T7, R7>,
+    h: Stream<T8, R8>,
+    i: Stream<T9, R9>
+  ): Stream<
+    T | T1 | T2 | T3 | T4 | T5 | T6 | T7 | T8 | T9,
+    (R | R1 | R2 | R3 | R4 | R5 | R6 | R7 | R8 | R9)[]
+  >;
+  zip<
+    T1,
+    R1,
+    T2,
+    R2,
+    T3,
+    R3,
+    T4,
+    R4,
+    T5,
+    R5,
+    T6,
+    R6,
+    T7,
+    R7,
+    T8,
+    R8,
+    T9,
+    R9,
+    T10,
+    R10
+  >(
+    a: Stream<T1, R1>,
+    b: Stream<T2, R2>,
+    c: Stream<T3, R3>,
+    d: Stream<T4, R4>,
+    e: Stream<T5, R5>,
+    f: Stream<T6, R6>,
+    g: Stream<T7, R7>,
+    h: Stream<T8, R8>,
+    i: Stream<T9, R9>,
+    j: Stream<T10, R10>
+  ): Stream<
+    T | T1 | T2 | T3 | T4 | T5 | T6 | T7 | T8 | T9 | T10,
+    (R | R1 | R2 | R3 | R4 | R5 | R6 | R7 | R8 | R9 | R10)[]
+  >;
+  zip(...others: Stream<any, any>[]) {
+    const accumulator = others.map((other) => other[Symbol.iterator]());
+    return this.transform(accumulator, (entry, acc) => {
+      const nextValues = acc
+        .map((n) => n.next())
+        .filter((n) => !n.done)
+        .map((n) => n.value);
+      if (nextValues.length !== acc.length) {
+        return;
+      }
+      return [[entry, ...nextValues], acc];
+    });
+  }
+
   // Consumers
 
   toArray(): R[] {

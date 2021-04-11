@@ -133,6 +133,21 @@ describe("Stream", () => {
     expect(arr).toStrictEqual([1, 2, 3, 4, 5]);
   });
 
+  it("should zip values from streams", () => {
+    const s1 = stream.fromArray([1, 2, 3, 4]);
+    const s2 = stream.fromArray(["a", "b", "c"]);
+    const s3 = stream.fromArray([true, false, true]);
+    const arr = s1.zip(s2, s3).toArray();
+
+    expect(arr).toStrictEqual([
+      [1, "a", true],
+      [2, "b", false],
+      [3, "c", true],
+    ]);
+  });
+});
+
+describe("AsyncStream", () => {
   it("should unfold async and return", async () => {
     let n = 0;
     const arr = await stream
@@ -191,7 +206,7 @@ describe("Stream", () => {
     expect(result).toStrictEqual([2, "_a", true, 4, "_b", true, 6, "_c", true]);
   });
 
-  it("should zip with combine", async () => {
+  it("should combine other async streams into one", async () => {
     const s1 = stream.fromArray([1, 2, 3]).mapAsync(async (n) => n * 2);
     const s2 = stream.fromArray(["a", "b", "c"]).mapAsync(async (n) => `_${n}`);
     const s3 = stream.fromArray([true, true, true]).mapAsync(async (n) => n);
@@ -225,6 +240,26 @@ describe("Stream", () => {
       "one 4", // 40ms
       "one 5", // 50ms
       "two 2", // 60ms
+    ]);
+  });
+
+  it("should debounce entries", async () => {
+    // emits at 0ms and 10ms, but the debounce limit is every 11ms
+    const arr = await stream.interval(10).take(2).debounce(11).toArray();
+
+    expect(arr).toStrictEqual([0]);
+  });
+
+  it("should zip other async streams", async () => {
+    const s1 = stream.fromArray([1, 2, 3, 4]).mapAsync(async (n) => n);
+    const s2 = stream.fromArray(["a", "b", "c"]).mapAsync(async (n) => n);
+    const s3 = stream.fromArray([true, false, true]).mapAsync(async (n) => n);
+    const arr = await s1.zip(s2, s3).toArray();
+
+    expect(arr).toStrictEqual([
+      [1, "a", true],
+      [2, "b", false],
+      [3, "c", true],
     ]);
   });
 });

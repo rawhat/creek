@@ -8,7 +8,7 @@
     "check": "npx tsc --noEmit",
     "test": "jest",
     "benchmark": "npx ts-node src/benchmark.ts",
-    "prettier": "npx prettier -w ."
+    "prettier": "npx prettier -w src/**.*"
   },
   "author": "Alex Manning",
   "license": "ISC",

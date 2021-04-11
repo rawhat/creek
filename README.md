@@ -134,6 +134,7 @@ const s = stream.from(1).transform(0, (n, acc) => {
   }
   return [n, acc + 1];
 });
+// Stream<1, 2, 3>
 ```
 
 ### `stream.map`
@@ -161,6 +162,15 @@ Removes values from the stream for which the predicate is not truthy.
 ```javascript
 const s = stream.from(1).filter((n) => n % 2 === 0);
 // Stream<2, 4, 6, ...>
+```
+
+### `stream.drop`
+
+Skips `n` values from the stream, then resumes emitting.
+
+```javascript
+const s = stream.from(1).drop(3);
+// Stream<4, 5, 6, ...>
 ```
 
 ### `stream.flatten`
@@ -199,7 +209,38 @@ const s3 = s1.concat(s2);
 // Stream<1, 2, 3, 4, 5, 6>
 ```
 
-### `stream.combine`
+### `stream.withIndex`
+
+Converts the stream entry to a tuple with the index of the element.
+
+```javascript
+const s = stream.fromArray([1, 2, 3]).withIndex();
+// Stream<[1, 0], [2, 1], [3, 2]>
+```
+
+### `stream.zip`
+
+Takes a value from each stream and emits one combined value. Halts whenever
+any stream completes.
+
+```javascript
+const s1 = stream.fromArray([1, 2, 3, 4]);
+const s2 = stream.fromArray(["a", "b", "c"]);
+const s3 = s1.zip(s2);
+
+// Stream<[1, "a"], [2, "b"], [3, "c"]>
+```
+
+### `asyncStream.debounce`
+
+Limit the frequency of events to some interval.
+
+```javascript
+const s1 = stream.interval(10).take(2).debounce(11);
+// AsyncStream<0>
+```
+
+### `asyncStream.combine`
 
 Interleave multiple asynchronous streams. Chaining this method will interleave
 the combined streams. The ordering matters, as well as how you chain them. The
@@ -221,15 +262,6 @@ s1.combine(s2).combine(s3);
 // AsyncStream<true, 2, false, "a", true, "4", "b", "c">
 ```
 
-### `stream.withIndex`
-
-Converts the stream entry to a tuple with the index of the element.
-
-```javascript
-const s = stream.fromArray([1, 2, 3]).withIndex();
-// Stream<[1, 0], [2, 1], [3, 2]>
-```
-
 ## Consumers
 
 ### `stream.take`
@@ -239,15 +271,6 @@ Pulls `n` values from the stream.
 ```javascript
 const s = stream.from(1).take(3);
 // Stream<1, 2, 3>
-```
-
-### `stream.drop`
-
-Skips `n` values from the stream, then resumes emitting.
-
-```javascript
-const s = stream.from(1).drop(3);
-// Stream<4, 5, 6, ...>
 ```
 
 ### `stream.takeUntil`
