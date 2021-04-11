@@ -130,7 +130,7 @@ export class Stream<T, R> {
   // Consumers
 
   toArray(): R[] {
-    return [...this[Symbol.iterator]()];
+    return Array.from(this);
   }
 
   fold<V>(initial: V, reducer: (next: R, accumulator: V) => V) {

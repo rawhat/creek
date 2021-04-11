@@ -343,59 +343,24 @@ export class AsyncStream<T, R> {
   // Consumers
 
   async toArray(): Promise<R[]> {
-    let results: R[] = [];
-    for await (const elem of this.generator()) {
-      const result = await this.applyTransforms(elem);
-      if (result.type === "value") {
-        results.push(await result.value);
-      } else if (result.type === "flatten") {
-        if (Array.isArray(result.value)) {
-          results.push(...(await Promise.all(result.value)));
-        } else {
-          results.push(await result.value);
-        }
-      } else if (result.type === "halt") {
-        break;
-      } else {
-        continue;
-      }
+    let res = [];
+    for await (const elem of this) {
+      res.push(elem);
     }
-    return results;
+    return res;
   }
 
   async fold<V>(initial: V, reducer: (next: R, accumulator: V) => Promise<V>) {
     let accumulator = initial;
-    for await (const elem of this.generator()) {
-      const result = await this.applyTransforms(elem);
-      if (result.type === "value") {
-        accumulator = await reducer(await result.value, accumulator);
-      } else if (result.type === "flatten") {
-        if (Array.isArray(result.value)) {
-          accumulator = result.value.reduce(
-            (v, acc) => reducer(v, acc),
-            accumulator
-          );
-        } else {
-          accumulator = await reducer(await result.value, accumulator);
-        }
-      } else if (result.type === "halt") {
-        return accumulator;
-      } else {
-        continue;
-      }
+    for await (const elem of this) {
+      accumulator = await reducer(elem, accumulator);
     }
     return accumulator;
   }
 
   async forEach(effect: (value: R) => void) {
-    for await (const elem of this.generator()) {
-      const result = await this.applyTransforms(elem);
-      if (result.type === "halt") {
-        return;
-      }
-      if (result.type === "value") {
-        effect(await result.value);
-      }
+    for await (const elem of this) {
+      effect(elem);
     }
   }
 
