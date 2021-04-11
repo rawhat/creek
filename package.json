@@ -6,7 +6,8 @@
   "scripts": {
     "build": "npx tsc --declaration",
     "test": "jest",
-    "benchmark": "npx tsx && node src/benchmark.js"
+    "benchmark": "npx tsx && node src/benchmark.js",
+    "prettier": "npx prettier -w ."
   },
   "author": "Alex Manning",
   "license": "ISC",
