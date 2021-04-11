@@ -2,7 +2,7 @@
   "name": "ts-stream",
   "version": "0.1.2",
   "description": "Lazy lists for TypeScript and JavaScript",
-  "main": "src/index.js",
+  "main": "dist/index.js",
   "scripts": {
     "build": "npx parcel build src/index.ts",
     "check": "npx tsc --noEmit",
