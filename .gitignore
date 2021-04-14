@@ -4,3 +4,4 @@
 /test/*.d.ts
 /src/benchmark.js
 /src/benchmark.d.ts
+/dist
