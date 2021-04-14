@@ -1,6 +1,6 @@
 {
   "name": "@rawhat/creek",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Lazy list and event stream library for TS/JS",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -13,8 +13,8 @@
   },
   "author": "Alex Manning",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/rawhat/ts-stream",
-  "repository": "rawhat/ts-stream",
+  "homepage": "https://github.com/rawhat/creek",
+  "repository": "rawhat/creek",
   "devDependencies": {
     "@types/jest": "^26.0.22",
     "@types/node": "^14.14.37",
