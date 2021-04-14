@@ -1,4 +1,4 @@
-# ts-stream
+# creek
 
 Lazy list methods, based loosely on the `Elixir.Stream` module.
 
