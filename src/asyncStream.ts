@@ -5,19 +5,15 @@ export type AsyncStreamEntry<T> = StreamEntry<Promise<T> | T>;
 export type AsyncStreamResult<T> = { type: "halt" } | AsyncStreamEntry<T>;
 
 export class AsyncStream<T, R> {
-  private generator: () => AsyncGenerator<T, void, void>;
+  private iterator: () => AsyncIterator<T, void, void>;
   private transforms: Function[] = [];
 
   constructor(
-    generator: () => AsyncGenerator<T, void, void>,
+    iterator: () => AsyncIterator<T, void, void>,
     transforms: Function[] = []
   ) {
-    this.generator = generator;
+    this.iterator = iterator;
     this.transforms = transforms;
-  }
-
-  public getGenerator(): AsyncGenerator<T, void, void> {
-    return this.generator();
   }
 
   // Transformers
@@ -53,7 +49,7 @@ export class AsyncStream<T, R> {
     };
 
     return new AsyncStream<T, N>(
-      this.generator,
+      this.iterator,
       this.transforms.concat(wrappedMapper)
     );
   }
@@ -400,34 +396,34 @@ export class AsyncStream<T, R> {
     R | R1 | R2 | R3 | R4 | R5 | R6 | R7 | R8 | R9 | R10
   >;
 
-  combine(...others: AsyncStream<any, any>[]) {
-    const generators = [
+  combine<V>(...others: AsyncStream<V, V>[]) {
+    const iterators = [
       this[Symbol.asyncIterator](),
       ...others.map((gen) => gen[Symbol.asyncIterator]()),
     ];
 
-    const promises = generators.map(async (generator, index) => {
-      const res = await generator.next();
+    const promises = iterators.map(async (iterator, index) => {
+      const res = await iterator.next();
       return {
         index,
-        generator: index,
+        iterator: index,
         retVal: res,
       };
     });
 
     type QueueEntry = {
       index: number;
-      generator: number;
-      retVal: IteratorResult<R>;
+      iterator: number;
+      retVal: IteratorResult<R | V>;
     };
 
     type Accumulator = {
-      generators: AsyncGenerator<any>[];
+      iterators: AsyncIterator<R | V>[];
       queue: { [index: number]: Promise<QueueEntry> };
     };
 
     const accumulator: Accumulator = {
-      generators,
+      iterators,
       queue: promises.reduce(
         (acc, next, index) => ({
           ...acc,
@@ -437,8 +433,8 @@ export class AsyncStream<T, R> {
       ),
     };
 
-    return unfoldAsync(accumulator, async ({ generators, queue }) => {
-      if (generators.length === 0 && Object.keys(queue).length === 0) {
+    return unfoldAsync(accumulator, async ({ iterators, queue }) => {
+      if (iterators.length === 0 && Object.keys(queue).length === 0) {
         return;
       }
 
@@ -446,8 +442,8 @@ export class AsyncStream<T, R> {
       delete queue[result.index];
 
       if (result.retVal.done) {
-        generators.splice(result.generator, 1);
-        if (generators.length === 0 && Object.keys(queue).length === 0) {
+        iterators.splice(result.iterator, 1);
+        if (iterators.length === 0 && Object.keys(queue).length === 0) {
           return;
         }
         result = await Promise.race(Object.values(queue));
@@ -459,16 +455,16 @@ export class AsyncStream<T, R> {
 
       const nextIndex =
         Math.max(...Object.keys(queue).map((n) => parseInt(n))) + 1;
-      const next = generators[result.generator].next().then((res) => {
+      const next = iterators[result.iterator].next().then((res) => {
         return {
           index: nextIndex,
-          generator: result.generator,
+          iterator: result.iterator,
           retVal: res,
         };
       });
       queue[nextIndex] = next;
 
-      return [result.retVal.value, { generators, queue }];
+      return [result.retVal.value, { iterators, queue }];
     });
   }
 
@@ -497,18 +493,45 @@ export class AsyncStream<T, R> {
   }
 
   [Symbol.asyncIterator]() {
-    const self = this;
-    return (async function* () {
-      for await (const elem of self.generator()) {
-        const result = await self.applyTransforms(elem);
-        if (result.type === "halt") {
-          return;
+    const iter = this.iterator();
+    let buffer: R[] = [];
+
+    return {
+      next: async () => {
+        while (true) {
+          if (buffer.length > 0) {
+            const [value, ...rest] = buffer;
+            buffer = rest;
+            return { value, done: false };
+          }
+          const value = await iter.next();
+          if (value.done) {
+            return { done: true, value: undefined };
+          }
+          const mapped = await this.applyTransforms(value.value);
+          switch (mapped.type) {
+            case "halt": {
+              return { done: true, value: undefined };
+            }
+            case "skip": {
+              continue;
+            }
+            case "flatten": {
+              if (Array.isArray(mapped.value)) {
+                const [value, ...rest] = mapped.value;
+                buffer = buffer.concat(rest);
+                return { value, done: false };
+              } else {
+                return { value: mapped.value, done: false };
+              }
+            }
+            case "value": {
+              return { value: mapped.value, done: false };
+            }
+          }
         }
-        if (result.type === "value") {
-          yield result.value;
-        }
-      }
-    })();
+      },
+    };
   }
 
   private async applyTransforms(value: T): Promise<AsyncStreamResult<R>> {

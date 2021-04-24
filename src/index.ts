@@ -2,55 +2,65 @@ import { AsyncStream } from "./asyncStream";
 import { Stream } from "./stream";
 
 export function of<T>(elem: T) {
-  return new Stream<T, T>(function* () {
-    yield elem;
-  });
+  let done = false;
+  return new Stream<T, T>(() => ({
+    next: () => {
+      if (done) {
+        return { done: true, value: undefined };
+      }
+      return { value: elem, done: false };
+    },
+  }));
 }
 
 export function fromArray<T>(elems: T[]) {
-  return new Stream<T, T>(function* () {
-    for (let elem of elems) {
-      yield elem;
-    }
-  });
+  let index = 0;
+  return new Stream<T, T>(() => ({
+    next: () => {
+      if (index >= elems.length) {
+        return { done: true, value: undefined };
+      }
+      return { value: elems[index++], done: false };
+    },
+  }));
 }
 
 export function from(n: number) {
   let num = n;
-  return new Stream<number, number>(function* () {
-    while (true) {
-      yield num++;
-    }
-  });
+  return new Stream<number, number>(() => ({
+    next: () => {
+      return { value: num++, done: false };
+    },
+  }));
 }
 
 export function unfold<T, R>(initial: R, mapper: (v: R) => [T, R] | undefined) {
   let acc = initial;
-  return new Stream<T, R>(function* () {
-    while (true) {
+  return new Stream<T, R>(() => ({
+    next: () => {
       const mapped = mapper(acc);
       if (mapped === undefined) {
-        return;
+        return { done: true, value: undefined };
       }
       acc = mapped[1];
-      yield mapped[0];
-    }
-  });
+      return { value: mapped[0], done: false };
+    },
+  }));
 }
 
 export function iterate<T>(initial: T, mapper: (v: T) => T) {
   let acc: T;
-  return new Stream<T, T>(function* () {
-    while (true) {
+  return new Stream<T, T>(() => ({
+    next: () => {
       if (!acc) {
         acc = initial;
-        yield initial;
+        return { value: initial, done: false };
       } else {
         acc = mapper(acc);
-        yield acc;
+        return { value: acc, done: false };
       }
-    }
-  });
+    },
+  }));
 }
 
 export function interval(n: number) {

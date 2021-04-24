@@ -8,14 +8,14 @@ export type StreamEntry<T> =
 export type StreamResult<T> = StreamEntry<T> | { type: "halt" };
 
 export class Stream<T, R> {
-  private generator: () => Generator<T, void, void>;
+  private iterator: () => Iterator<T, void, void>;
   private transforms: Function[] = [];
 
   constructor(
-    generator: () => Generator<T, void, void>,
+    iterator: () => Iterator<T, void, void>,
     transforms: Function[] = []
   ) {
-    this.generator = generator;
+    this.iterator = iterator;
     this.transforms = transforms;
   }
 
@@ -49,7 +49,7 @@ export class Stream<T, R> {
       }
     };
     return new Stream<T, N>(
-      this.generator,
+      this.iterator,
       this.transforms.concat(wrappedMapper)
     );
   }
@@ -116,14 +116,27 @@ export class Stream<T, R> {
   }
 
   concat<V>(other: Stream<V, V>): Stream<R | V, R | V> {
-    const self = this;
-    return new Stream<R | V, R | V>(function* () {
-      for (const one of self) {
-        yield one;
-      }
-      for (const two of other) {
-        yield two;
-      }
+    return new Stream<R | V, R | V>(() => {
+      let iterators = [this[Symbol.iterator](), other[Symbol.iterator]()];
+      return {
+        next: () => {
+          const [iter, nextIter] = iterators;
+          if (!iter) {
+            return { done: true, value: undefined };
+          }
+          const { value, done } = iter.next();
+          if (done) {
+            if (!nextIter) {
+              return { done: true, value: undefined };
+            } else {
+              iterators = iterators.slice(1);
+              const { value, done } = nextIter.next();
+              return { value, done };
+            }
+          }
+          return value;
+        },
+      };
     });
   }
 
@@ -253,7 +266,7 @@ export class Stream<T, R> {
   // Consumers
 
   toArray(): R[] {
-    return Array.from(this);
+    return [...this];
   }
 
   fold<V>(initial: V, reducer: (next: R, accumulator: V) => V) {
@@ -290,35 +303,53 @@ export class Stream<T, R> {
     }).filter(predicate);
   }
 
-  foldAsync<V>(initial: V, reducer: (next: R, acc: V) => Promise<V>) {
-    const self = this;
-    return new AsyncStream<R, R>(async function* () {
-      for (const elem of self) {
-        yield elem;
-      }
-    }, this.transforms).fold<V>(initial, reducer);
+  async foldAsync<V>(initial: V, reducer: (next: R, acc: V) => Promise<V>) {
+    let acc = initial;
+    for (const elem of this) {
+      acc = await reducer(elem, acc);
+    }
+    return acc;
   }
 
   [Symbol.iterator]() {
-    const self = this;
-    return (function* () {
-      for (const elem of self.generator()) {
-        const result = self.applyTransforms(elem);
-        if (result.type === "halt") {
-          return;
-        }
-        if (result.type === "flatten") {
-          if (Array.isArray(result.value)) {
-            yield* result.value;
-          } else {
-            yield result.value;
+    const iter = this.iterator();
+    let buffer: R[] = [];
+    return {
+      next: () => {
+        while (true) {
+          if (buffer.length > 0) {
+            const [value, ...rest] = buffer;
+            buffer = rest;
+            return { value, done: false };
+          }
+          const value = iter.next();
+          if (value.done) {
+            return { done: true };
+          }
+          const mapped = this.applyTransforms(value.value);
+          switch (mapped.type) {
+            case "halt": {
+              return { done: true };
+            }
+            case "skip": {
+              continue;
+            }
+            case "flatten": {
+              if (Array.isArray(mapped.value)) {
+                const [value, ...rest] = mapped.value;
+                buffer = buffer.concat(rest);
+                return { value, done: false };
+              } else {
+                return { value: mapped.value, done: false };
+              }
+            }
+            case "value": {
+              return { value: mapped.value, done: false };
+            }
           }
         }
-        if (result.type === "value") {
-          yield result.value;
-        }
-      }
-    })();
+      },
+    };
   }
 
   private applyTransforms(value: T): StreamResult<R> {
