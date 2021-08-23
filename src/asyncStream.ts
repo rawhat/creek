@@ -61,6 +61,13 @@ export class AsyncStream<T, R> {
     ]);
   }
 
+  mapSync<V>(mapper: (entry: R) => V): AsyncStream<T, V> {
+    return this.transform(undefined, async (entry, acc) => [
+      mapper(entry),
+      acc,
+    ]);
+  }
+
   filter(predicate: (entry: R) => Promise<boolean>): AsyncStream<T, R> {
     return this.transform(undefined, async (entry, acc) => {
       if (!(await predicate(entry))) {
