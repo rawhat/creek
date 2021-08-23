@@ -112,24 +112,19 @@ export function iterateAsync<T>(initial: T, mapper: (v: T) => Promise<T>) {
   });
 }
 
-type EventMap<T> = T extends EventTarget
-  ? T extends WebSocket
-    ? WebSocketEventMap
-    : T extends HTMLElement
-    ? HTMLElementEventMap
-    : T extends Element
-    ? ElementEventMap
-    : never
-  : never;
+type HasListener<S, Event extends string> =
+  | (S extends { addListener: (event: Event, listener: (...args: any[]) => any) => any } ? S : never)
+  | (S extends { addEventListener: (event: Event, listener: (...args: any[]) => any) => any } ? S : never);
 
-export function fromEvent<
-  B extends EventTarget,
-  T extends keyof EventMap<B> & string,
-  E extends EventMap<B>[T]
->(target: B, type: T): AsyncStream<E, E> {
-  return new AsyncStream<E, E>(async function* () {
-    let resolver: ((event: E) => void) | undefined = undefined;
-    let promise = new Promise((resolve) => {
+type ListenerArguments<S, Event> =
+| (S extends { addListener: (event: Event, listener: (...args: infer F) => any) => any } ? F : never)
+| (S extends { addEventListener: (event: Event, listener: (...args: infer F) => any) => any } ? F : never);
+
+export function fromEvent<Event extends string, S>(target: HasListener<S, Event>, type: Event) {
+  type CallbackArgs = ListenerArguments<S, Event>;
+  return new AsyncStream<CallbackArgs, CallbackArgs>(async function* () {
+    let resolver: ((event: CallbackArgs) => void) | undefined = undefined;
+    let promise: Promise<CallbackArgs> = new Promise((resolve) => {
       resolver = resolve;
     });
     const setupPromise = () => {
@@ -138,19 +133,25 @@ export function fromEvent<
       });
     };
     setupPromise();
-    const handler = (event: E) => {
+    const handler = (...args: CallbackArgs) => {
       if (resolver) {
-        resolver(event);
+        resolver(args);
       }
     };
-    target.addEventListener(
-      type,
-      handler as EventListenerOrEventListenerObject
-    );
+    if ('addEventListener' in target) {
+      target.addEventListener(type, handler);
+    } else if ('addListener' in target) {
+      target.addListener(type, handler);
+    } else {
+      throw Error(
+        'Invalid target passed as event source.  ' +
+        'Must provide either `addEventListener` or `addListener` method'
+      );
+    }
 
     while (true) {
       if (promise) {
-        const event = ((await promise) as unknown) as E;
+        const event = await promise;
         yield event;
         setupPromise();
       }
